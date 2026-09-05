@@ -14,7 +14,7 @@ This register records significant decisions without turning open questions into 
 
 | ID | Title | Status | Scope |
 |---|---|---|---|
-| DEC-001 | Authentication provider and identity model | OPEN | Authentication |
+| DEC-001 | Authentication provider and identity model | ACCEPTED | Authentication |
 | DEC-002 | Production hosting provider | OPEN | Deployment |
 | DEC-003 | Production PostgreSQL provider | OPEN | Deployment/database operations |
 | DEC-004 | Unit/integration test framework | OPEN | Testing |
@@ -26,29 +26,37 @@ This register records significant decisions without turning open questions into 
 
 ## DEC-001 — Authentication provider and identity model
 
-**Status:** OPEN  
-**Date:** 2026-09-04  
-**Context:** The MVP requires production-ready registration, login, logout, password reset, sessions, and protected application routes. The source names Supabase Auth, Clerk, and Auth.js as candidates and prohibits custom password/auth infrastructure.
+**Status:** ACCEPTED  
+**Date:** 2026-09-05
 
-**Problem:** One provider must be selected before authentication implementation. The provider also determines how an application-level `User` record relates to the provider identity.
+**Context:** The MVP requires production-ready registration, login, logout, password reset, sessions, and protected application routes, without custom password/auth infrastructure.
+
+**Decision:** Use **Auth.js (NextAuth v5)** with the `Credentials` provider (email/password), backed by Prisma against the application's single PostgreSQL database.
+
+- **Session strategy:** Database-backed sessions via the Auth.js Prisma adapter (not JWT), to support session revocability (e.g., removing a `STAFF` member's access), consistent with the mandatory "secure sessions" requirement.
+- **Password hashing:** Argon2id via a maintained, reputable library, called from the `Credentials` provider's `authorize()` callback. Exact parameters (memory, iterations, parallelism) are not architecturally fixed here; they are a deployment-tuned implementation decision documented in `docs/security.md` or implementation notes.
+- **Schema scope:** Only `User` and `Session` are required by this configuration. `Account` and `VerificationToken` are **not included** — this MVP uses neither OAuth/social login nor email verification/magic-link sign-in, per `MASTER_SPEC.md` §3's explicit feature list. Their omission is deliberate, not an oversight; introducing them later requires a new approved requirement (e.g., OAuth support), not a silent schema restoration.
+- **Password reset:** Required by `MASTER_SPEC.md` §3 but is a distinct, gated follow-on implementation task, not bundled into Milestone 1's "Authentication" line item. It requires its own `PasswordResetToken` table (tenant-agnostic, hashed token, expiry, single-use) and must satisfy: cryptographically random token, hashed-at-rest storage, short expiry, atomic single-use consumption, identical response regardless of account existence (no enumeration), and no token/secret leakage in logs or errors. Full property list recorded in `docs/security.md`.
+- **Rate limiting:** Login and password-reset endpoints require minimum abuse controls (attempt caps per account and per source, generic failure messaging, reset-request throttling per email/IP) — thresholds recorded in `docs/security.md`, not fixed here.
+- **Transactional email provider:** Required to deliver password-reset emails. This is a new external service dependency and requires its own decision record (proposed `DEC-010`) before the reset flow is implemented — not treated as a bare implementation detail.
 
 **Alternatives considered:**
 
-- Supabase Auth — managed authentication with an existing PostgreSQL ecosystem; provider coupling and operational boundaries must be evaluated.
-- Clerk — managed authentication with a polished developer experience; provider dependency and ongoing cost must be evaluated.
-- Auth.js — application-integrated authentication approach with potentially lower direct provider cost; configuration/operational responsibility remains with the application.
+- Supabase Auth — managed authentication with an existing PostgreSQL ecosystem; rejected primarily because it couples identity to Supabase's managed Postgres, pre-empting DEC-003, and splits the system of record for users outside the Prisma schema.
+- Clerk — managed authentication with a polished developer experience; rejected on recurring per-MAU cost grounds for a pre-revenue MVP.
+- Auth.js — application-integrated authentication approach; accepted.
 
-**Current decision:** No provider has been accepted. Do not implement authentication against a candidate as though it is final.
+**Rationale:** Auth.js keeps identity data (`User`, `Session`) inside the same Prisma-modeled PostgreSQL database as all tenant data — one codebase, one database, no second managed identity system — matching `MASTER_SPEC.md`'s cost/simplicity priorities (§7, §39, §42) and avoiding pre-committing DEC-002/DEC-003 (hosting/database provider) to a vendor-specific auth platform.
 
 **Selection constraints:** Secure production sessions, registration/login/logout/password reset, protected routes, manageable cost, clear identity mapping, no custom password hashing, and no unnecessary architectural complexity.
 
-**Security implications:** The chosen provider becomes part of the identity trust boundary and must support secure session handling. Internal authorization must still be application-owned; provider authentication is not a substitute for business membership checks.
+**Security implications:** The Auth.js/Prisma boundary is part of the identity trust boundary and must support secure session handling. Internal business/platform authorization remains fully application-owned in the server-side service layer regardless of provider, per DEC-008/DEC-009 — unaffected by this decision. Provider authentication is not a substitute for business membership checks.
 
-**Operational implications:** Provider uptime, recovery, limits, pricing, environment configuration, and local development ergonomics must be evaluated.
+**Operational implications:** No new hosted identity platform to operate. Adds one new dependency once the reset flow ships (transactional email provider, tracked separately as proposed `DEC-010`).
 
-**Migration implications:** Changing providers later can require identity mapping and session migration. Record any accepted provider decision before implementation.
+**Migration implications:** Low vendor lock-in — identity data lives in our own database; switching auth libraries later does not require exporting from or migrating off an external identity system.
 
-**Reconsideration conditions:** Security limitation, unacceptable cost, unacceptable operational dependency, or material mismatch with MVP requirements.
+**Reconsideration conditions:** A future approved requirement for OAuth/social login or email verification would require adding `Account`/`VerificationToken` via a superseding or amending decision, not silent schema growth. Also reconsider on security limitation, unacceptable cost, unacceptable operational dependency, or material mismatch with MVP requirements.
 
 ## DEC-002 — Production hosting provider
 

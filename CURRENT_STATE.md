@@ -19,7 +19,7 @@ This file records what is true in the repository at the time of verification. It
 | Repository | Initialized for documentation foundation | This package |
 | Application implementation | Not Started | No application source implementation exists |
 | Database schema | Not Started | No Prisma schema or migrations created |
-| Authentication | Not Started / Provider Open | No provider configured |
+| Authentication | Not Started — provider decision accepted (DEC-001: Auth.js, database-backed sessions, Argon2id hashing); no authentication code, schema, or configuration exists | No implementation exists; decision recorded in `docs/architecture-decisions.md` |
 | Business management | Not Started | No implementation |
 | Customer management | Not Started | No implementation |
 | Product management | Not Started | No implementation |
@@ -59,7 +59,7 @@ Messaging APIs, AI, payment gateways, inventory/stock/warehouse/purchasing, adva
 
 | ID | Decision | Status | What it blocks |
 |---|---|---|---|
-| DEC-001 | Authentication provider and identity model | OPEN | Authentication implementation |
+| DEC-001 | Authentication provider and identity model | ACCEPTED | Authentication design is now settled (Auth.js, database-backed sessions, Argon2id hashing); no authentication code has been implemented |
 | DEC-002 | Production hosting provider | OPEN | Final production deployment configuration |
 | DEC-003 | Production PostgreSQL provider | OPEN | Final production database configuration |
 | DEC-004 | Unit/integration testing framework | OPEN | Final unit/integration test tooling |

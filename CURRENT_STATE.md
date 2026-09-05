@@ -14,7 +14,7 @@ This file records what is true in the repository at the time of verification. It
 
 ## 2. Current repository reality
 
-| Area | State | Evidence as of 2026-09-04 |
+| Area | State | Evidence as of 2026-09-05 |
 |---|---|---|
 | Repository | Initialized for documentation foundation | This package |
 | Application implementation | Not Started | No application source implementation exists |
@@ -124,7 +124,7 @@ The supplied pre-existing `CURRENT_STATE.md` contained both `Current Milestone: 
 
 ## 11. Immediate next step
 
-1. Resolve DEC-001 and record the accepted authentication decision as an ADR before authentication implementation.
+1. DEC-001 is accepted and recorded (commit `4ef6c4e969aa1d4f983aaaa3a23699fc3da7716e`). Begin Milestone 1 implementation (Next.js App Router, TypeScript, Tailwind, Prisma, Auth.js-based authentication, basic layout) per `docs/development.md` and `docs/roadmap.md`.
 2. Initialize implementation incrementally according to [`docs/development.md`](docs/development.md) and the milestone plan in [`docs/roadmap.md`](docs/roadmap.md).
 3. Resolve AMB-001 before final authoritative financial-calculation implementation.
 4. Resolve AMB-002 before the status workflow milestone is marked complete.

@@ -19,7 +19,7 @@ This file records what is true in the repository at the time of verification. It
 | Repository | Initialized for documentation foundation | This package |
 | Application implementation | Not Started | No application source implementation exists |
 | Database schema | Not Started | No Prisma schema or migrations created |
-| Authentication | Not Started — provider decision accepted (DEC-001: Auth.js, database-backed sessions, Argon2id hashing); no authentication code, schema, or configuration exists | No implementation exists; decision recorded in `docs/architecture-decisions.md` |
+| Authentication | Not Started — provider decision accepted and amended (DEC-001: Auth.js, Credentials provider, JWT sessions with `sessionVersion` invalidation, Argon2id hashing); no authentication code, schema, or configuration exists yet | No implementation exists; decision recorded in `docs/architecture-decisions.md` |
 | Business management | Not Started | No implementation |
 | Customer management | Not Started | No implementation |
 | Product management | Not Started | No implementation |
@@ -59,7 +59,7 @@ Messaging APIs, AI, payment gateways, inventory/stock/warehouse/purchasing, adva
 
 | ID | Decision | Status | What it blocks |
 |---|---|---|---|
-| DEC-001 | Authentication provider and identity model | ACCEPTED | Authentication design is now settled (Auth.js, database-backed sessions, Argon2id hashing); no authentication code has been implemented |
+| DEC-001 | Authentication provider and identity model | ACCEPTED (amended) | Authentication design settled (Auth.js, Credentials provider, JWT sessions with `sessionVersion` global invalidation, Argon2id hashing); amended from database-backed sessions due to a discovered Auth.js Credentials-provider/database-session incompatibility; no authentication code has been implemented |
 | DEC-002 | Production hosting provider | OPEN | Final production deployment configuration |
 | DEC-003 | Production PostgreSQL provider | OPEN | Final production database configuration |
 | DEC-004 | Unit/integration testing framework | OPEN | Final unit/integration test tooling |
@@ -124,7 +124,7 @@ The supplied pre-existing `CURRENT_STATE.md` contained both `Current Milestone: 
 
 ## 11. Immediate next step
 
-1. DEC-001 is accepted and recorded (commit `4ef6c4e969aa1d4f983aaaa3a23699fc3da7716e`). Begin Milestone 1 implementation (Next.js App Router, TypeScript, Tailwind, Prisma, Auth.js-based authentication, basic layout) per `docs/development.md` and `docs/roadmap.md`.
+1. DEC-001 is accepted and amended (commit `4ef6c4e969aa1d4f983aaaa3a23699fc3da7716e`, amended in a subsequent governance commit) to use JWT sessions with a `sessionVersion` global-invalidation mechanism, resolving a discovered Auth.js Credentials-provider/database-session incompatibility. Begin Milestone 1 implementation (Next.js App Router, TypeScript, Tailwind, Prisma, Auth.js-based authentication, basic layout) per `docs/development.md` and `docs/roadmap.md` once explicitly authorized.
 2. Initialize implementation incrementally according to [`docs/development.md`](docs/development.md) and the milestone plan in [`docs/roadmap.md`](docs/roadmap.md).
 3. Resolve AMB-001 before final authoritative financial-calculation implementation.
 4. Resolve AMB-002 before the status workflow milestone is marked complete.

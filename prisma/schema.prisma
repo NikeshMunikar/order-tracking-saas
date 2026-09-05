@@ -1,0 +1,43 @@
+// Prisma schema — Milestone 1 scope only.
+//
+// Only the `User` model is defined here. Per DEC-001 (accepted, amended
+// 2026-09-05), authentication uses Auth.js Credentials + JWT sessions, so no
+// `Session`, `Account`, or `VerificationToken` table is required or present.
+//
+// Do not add Business, BusinessMember, Customer, Product, Order, or any
+// other domain model here — those belong to later milestones per
+// MASTER_SPEC.md §44 and docs/roadmap.md, and must not be pre-built in M1.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Application-level identity record.
+///
+/// MASTER_SPEC.md §8: "Authentication identity should primarily be managed
+/// by the selected auth provider... Do NOT store passwords unless the
+/// selected authentication architecture explicitly requires it." The
+/// accepted DEC-001 Credentials-provider architecture explicitly requires
+/// storing a password hash (there is no external identity provider to hold
+/// it), so `passwordHash` is included deliberately, not by default.
+///
+/// `sessionVersion` implements the DEC-001 amendment's global JWT
+/// invalidation mechanism: incrementing it invalidates every previously
+/// issued JWT for this user on their next authorization check. It is not
+/// per-session revocation — see docs/architecture-decisions.md DEC-001.
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String?
+  sessionVersion Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("users")
+}

@@ -2,7 +2,7 @@
 
 Document Status: Active  
 Source Authority: `MASTER_SPEC.md` + approved decisions; this file records repository reality  
-Last Reviewed: 2026-09-05  
+Last Reviewed: 2026-09-06  
 Project Phase: MILESTONE 1 IN PROGRESS — implementation checkpoint reached, full verification not yet complete  
 Documentation State: Generated / Specified  
 
@@ -36,7 +36,7 @@ This file records what is true in the repository at the time of verification. It
 
 ## 3. Verification baseline
 
-- Last Verified Commit: pending this fix's commit (see report below; prior tip was `02510c6`)
+- Last Verified Commit: `5687693` (Prisma 7 compatibility fix commit; tip of the six M1 checkpoint commits — see §11). "Verified" here means the itemized checks below were actually run against this commit, not that all of them passed — see the itemized table for exactly which did and did not.
 - Last Verified Branch: `main`
 - Last Verified Environment: Sandboxed implementation environment with local PostgreSQL 16 and restricted outbound network access (no access to `binaries.prisma.sh`)
 - Last Verified By: AI coding agent, M1 Prisma 7.10 compatibility fix session
@@ -151,7 +151,7 @@ The supplied pre-existing `CURRENT_STATE.md` contained both `Current Milestone: 
 
 ## 11. M1 checkpoint — implementation commits
 
-The following five commits implement M1 scope (scaffold, database schema, authentication, UI, tests). None of them may be treated as "M1 complete" — see §3 for exactly what remains unverified.
+The following six commits implement M1 scope (scaffold, database schema, authentication, UI, tests, Prisma 7 compatibility fix). None of them may be treated as "M1 complete" — see §3 for exactly what remains unverified.
 
 | Commit | Description |
 |---|---|
@@ -160,16 +160,19 @@ The following five commits implement M1 scope (scaffold, database schema, authen
 | `7d82546` | feat(auth): implement Auth.js Credentials authentication per amended DEC-001 |
 | `1534288` | feat(ui): add authentication pages and protected dashboard layout |
 | `02510c6` | test: add unit tests for password hashing and sessionVersion invalidation |
+| `5687693` | fix(db): Prisma 7 datasource.url compatibility (P1012) — `prisma.config.ts` + `@prisma/adapter-pg`; no architecture change |
 
 These sit on top of the governance commits `4ef6c4e` (DEC-001 accepted), `163d452` (M1-readiness state correction), and `cb6ac7f` (DEC-001 amended to JWT sessions).
 
 ## 12. Immediate next step
 
-1. **Resolve the Prisma CLI network blocker** (§3): in an environment with access to `binaries.prisma.sh`, run `npm install && npx prisma generate && npx prisma migrate dev` (or `prisma migrate resolve --applied 20260905103000_init` against the already-matching local database), then re-run `npx tsc --noEmit` and `npx next build` and confirm both pass cleanly.
-2. Only after step 1 passes: perform the full M1 completion gate (security review re-confirmation, manual auth-flow smoke test against a real running app) and update this file to mark M1 **COMPLETE**, replacing the "not yet complete/accepted" framing in §2 and this section.
-3. Resolve AMB-001 before final authoritative financial-calculation implementation (Milestone 5).
-4. Resolve AMB-002 before the status workflow milestone is marked complete (Milestone 6).
-5. Do not begin Milestone 2 until step 2 above is satisfied.
+1. **Configure the local environment, then re-run verification.** Two separate, non-architectural blockers have been identified so far, in two different environments: (a) the sandboxed implementation environment could not reach `binaries.prisma.sh` for Prisma CLI engine downloads; (b) the person's local development environment does not yet have `DATABASE_URL` configured, which independently blocks `prisma generate`/`validate`, TypeScript, and the production build. Neither is a defect in the Prisma 7 implementation (§3) — both are environment/configuration prerequisites. Set `DATABASE_URL` locally (see `.env.example`), then run `npm install && npx prisma generate && npx prisma validate`.
+2. **Reconcile migration bookkeeping before any `migrate dev`/`deploy`**: run `npx prisma migrate resolve --applied 20260905103000_init` against a database already matching the hand-authored migration (see §3's migration bookkeeping finding) — do not run `migrate dev` blind, as it would likely attempt to re-run that migration and fail on "relation users already exists."
+3. Re-run `npx tsc --noEmit` and `npx next build` and confirm both pass cleanly once step 1 succeeds.
+4. Only after steps 1–3 pass: perform the full M1 completion gate (security review re-confirmation, manual auth-flow smoke test against a real running app) and update this file to mark M1 **COMPLETE**, replacing the "not yet complete/accepted" framing in §2 and this section.
+5. Resolve AMB-001 before final authoritative financial-calculation implementation (Milestone 5).
+6. Resolve AMB-002 before the status workflow milestone is marked complete (Milestone 6).
+7. Do not begin Milestone 2 until step 4 above is satisfied.
 
 ## 13. Reality rule for AI agents
 

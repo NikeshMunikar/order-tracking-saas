@@ -20,7 +20,7 @@ This file records what is true in the repository at the time of verification. It
 |---|---|---|
 | Repository | Initialized, M1 implementation checkpoint reached | This package; commits `b6bc104`..`02510c6` |
 | Application implementation | **Implemented (M1 scope)** — Next.js App Router + TypeScript + Tailwind scaffold, authentication UI, protected dashboard shell | `src/app/**`, `src/components/**` |
-| Database schema | **Implemented, partially verified** — minimal `User` model only (`id`, `email`, `passwordHash`, `name`, `sessionVersion`, timestamps); no `Session`/`Account`/`VerificationToken`/business-domain tables | `prisma/schema.prisma`; migration applied and confirmed against a local dev PostgreSQL instance via `psql \d users` — this is a **database-level check only and is NOT equivalent to `prisma migrate dev` CLI verification** (see §3) |
+| Database schema | **Implemented, partially verified** — minimal `User` model only (`id`, `email`, `passwordHash`, `name`, `sessionVersion`, timestamps); no `Session`/`Account`/`VerificationToken`/business-domain tables. Prisma 7 config compatibility fix applied (`prisma.config.ts` + `@prisma/adapter-pg`) — see §3 | `prisma/schema.prisma`, `prisma.config.ts`, `src/lib/db/client.ts`; migration applied and confirmed against a local dev PostgreSQL instance via `psql \d users` — this is a **database-level check only and is NOT equivalent to `prisma migrate dev` CLI verification** (see §3) |
 | Authentication | **Implemented, not fully verified** — Auth.js v5, Credentials provider, JWT sessions, `sessionVersion` global invalidation, Argon2id hashing (`@node-rs/argon2`), registration/login/logout, server-side protected-route enforcement via `requireSession()` | `src/server/auth/**`, `src/lib/security/**`, `src/lib/validation/auth.ts`, `src/types/next-auth.d.ts`; decision recorded in `docs/architecture-decisions.md` DEC-001 |
 | Business management | Not Started | No implementation |
 | Customer management | Not Started | No implementation |
@@ -36,27 +36,33 @@ This file records what is true in the repository at the time of verification. It
 
 ## 3. Verification baseline
 
-- Last Verified Commit: `02510c6` (tip of the five M1 implementation commits; see §11 for the full list)
+- Last Verified Commit: pending this fix's commit (see report below; prior tip was `02510c6`)
 - Last Verified Branch: `main`
 - Last Verified Environment: Sandboxed implementation environment with local PostgreSQL 16 and restricted outbound network access (no access to `binaries.prisma.sh`)
-- Last Verified By: AI coding agent, M1 implementation session
+- Last Verified By: AI coding agent, M1 Prisma 7.10 compatibility fix session
 - Last Verification Date: 2026-09-05
+- **Prisma 7.10 compatibility fix applied:** Prisma 7 removed `datasource.url` support from `schema.prisma` (error P1012, confirmed independently in the person's own local environment with full network access — this is a schema-config incompatibility, separate from and in addition to this sandbox's network restriction below). Fixed per Prisma's own v7 documentation: `url` removed from `schema.prisma`'s `datasource` block; a new `prisma.config.ts` supplies the connection URL for CLI operations; `src/lib/db/client.ts` now constructs a `@prisma/adapter-pg` driver adapter and passes it to the `PrismaClient` constructor for the application runtime. Confirmed fixed: `prisma generate`/`validate` now load `prisma.config.ts` successfully and get past the P1012 error entirely in this environment too — the only remaining failure here is the pre-existing, unchanged network block below.
 - **Application verification evidence — itemized, do not summarize as a single pass/fail:**
 
 | Check | Result | Detail |
 |---|---|---|
-| `npm test` | **PASS — 8/8** | Node's built-in `node:test` runner (zero new dependency; does not resolve DEC-004). Covers Argon2id hash/verify round-trip, wrong-password rejection, malformed-hash safety, salt randomness, and `sessionVersion` match/mismatch/missing-value cases. |
+| `npm test` | **PASS — 8/8** | Node's built-in `node:test` runner (zero new dependency; does not resolve DEC-004). Unaffected by the Prisma config fix. |
 | ESLint (`npx eslint .`) | **PASS — clean** | Zero errors, zero warnings. |
-| `npx tsc --noEmit` | **FAIL — exactly one error** | `src/lib/db/client.ts(3,10): Module '"@prisma/client"' has no exported member 'PrismaClient'`. Root cause: `@prisma/client` has no generated types (see next row). Not a code defect — isolated and confirmed to this single line. |
-| `npx next build` | **PARTIAL — compiles, fails at typecheck** | Turbopack bundling succeeds ("Compiled successfully"); the build's TypeScript-checking phase fails on the exact same single error as above. No other build issues found. |
-| `npx prisma generate` / `validate` / `migrate dev` | **BLOCKED — unverified** | All Prisma CLI operations require fetching the schema-engine binary from `binaries.prisma.sh`, which is not reachable from this environment's allowed network domains (403 Forbidden). Confirmed repeatedly, including with the documented checksum-bypass environment variable and Prisma 7's driver-adapter/query-compiler preview mode — neither avoids the network dependency in this Prisma version. **This is the sole root cause of the `tsc`/`next build` failures above.** |
-| Database migration | **Database-level check only — NOT CLI-verified** | `prisma/migrations/20260905103000_init/migration.sql` was hand-authored to match `prisma/schema.prisma` exactly (since `prisma migrate dev` could not run), applied directly via `psql` against a local dev PostgreSQL 16 instance, and the resulting `users` table was confirmed via `\d users` to match the schema field-for-field. **This is explicitly not equivalent to a `prisma migrate dev`-generated and CLI-verified migration.** The migration file itself carries this same provenance note. |
+| `npx tsc --noEmit` | **FAIL — exactly one error, unchanged** | `src/lib/db/client.ts: Module '"@prisma/client"' has no exported member 'PrismaClient'`. Root cause unchanged: `@prisma/client` still has no generated types in this environment (see next row) — not a code defect, and not caused by the P1012 issue (that is now fixed). |
+| `npx next build` | **PARTIAL — compiles, fails at typecheck, unchanged** | Turbopack bundling succeeds; the build's TypeScript-checking phase fails on the exact same single error as above. |
+| `npx prisma generate` / `validate` | **P1012 FIXED; still BLOCKED on network** | Both commands now load `prisma.config.ts` successfully and no longer hit P1012. They still fail in this sandbox only because the Prisma CLI needs to fetch its schema-engine binary from `binaries.prisma.sh`, which remains outside this environment's allowed network domains (403 Forbidden) — unchanged from before this fix. **In the person's own environment (confirmed to have full network access, since it produced the distinct P1012 error rather than a network error), this fix should allow `generate`/`validate`/`migrate` to succeed** — that must be confirmed there, not assumed here. |
+| `npx prisma migrate dev` | **NOT RUN — do not run without reconciliation first** | See migration findings below: the local dev database's `users` table was created via hand-authored SQL, not through Prisma Migrate, so `_prisma_migrations` bookkeeping does not exist. Running `migrate dev` blind would likely attempt to re-run `20260905103000_init` and fail on "relation users already exists." Reconciliation (`prisma migrate resolve --applied 20260905103000_init`) is needed first — not performed in this fix, pending explicit authorization. |
+| Database migration | **Database-level check only — NOT CLI-verified** | `prisma/migrations/20260905103000_init/migration.sql` was hand-authored to match `prisma/schema.prisma` exactly, applied directly via `psql` against a local dev PostgreSQL 16 instance, and confirmed via `\d users` to match the schema field-for-field. **This remains explicitly not equivalent to a `prisma migrate dev`-generated and CLI-verified migration.** |
+| PostgreSQL connectivity (non-destructive) | **PASS** | Direct `pg` driver connection (same driver Prisma's adapter uses) confirmed: connects to `order_tracking_dev`, lists existing tables (`users` only), confirms `_prisma_migrations` does not yet exist. |
+
+**Migration bookkeeping finding (not yet acted on):** the dev database has the correct `users` table (matching the schema) but no Prisma migration history. Before running `prisma migrate dev`/`deploy` for real, run `npx prisma migrate resolve --applied 20260905103000_init` (or equivalent) against a database already in this state, so Prisma's bookkeeping matches reality without re-executing SQL that already ran. This has **not** been done as part of this fix — it touches migration bookkeeping semantics and is left for explicit authorization.
 
 **To close the remaining gap, in a network-unrestricted environment:**
 ```
 npm install
 npx prisma generate
-npx prisma migrate dev   # or: npx prisma migrate resolve --applied 20260905103000_init
+npx prisma validate
+npx prisma migrate resolve --applied 20260905103000_init   # reconcile bookkeeping first - do NOT run migrate dev blind (see finding above)
 npx tsc --noEmit          # expected to pass cleanly based on the isolation above
 npx next build            # expected to pass cleanly based on the isolation above
 npm test                  # already passing here, should remain so

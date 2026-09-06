@@ -7,6 +7,17 @@
 // Do not add Business, BusinessMember, Customer, Product, Order, or any
 // other domain model here — those belong to later milestones per
 // MASTER_SPEC.md §44 and docs/roadmap.md, and must not be pre-built in M1.
+//
+// Prisma 7 compatibility note: as of Prisma 7, `datasource.url` is no
+// longer supported directly in schema.prisma (P1012). Connection
+// configuration now lives in two places instead:
+//   - `prisma.config.ts` (project root) — used by the Prisma CLI
+//     (generate/validate/migrate).
+//   - The driver adapter passed to the `PrismaClient` constructor at
+//     runtime (`src/lib/db/client.ts`), via `@prisma/adapter-pg`.
+// This is an implementation-detail compatibility fix only — it does not
+// change the approved architecture (PostgreSQL, Prisma, DEC-001, DEC-008,
+// DEC-009 are all unaffected).
 
 generator client {
   provider = "prisma-client-js"
@@ -14,7 +25,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 /// Application-level identity record.

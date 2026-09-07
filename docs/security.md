@@ -48,7 +48,7 @@ The public tracking path must never inherit private business-session assumptions
 
 ## 3. Authentication security
 
-The application will use exactly one production-ready authentication solution. Provider selection is DEC-001 OPEN.
+The application uses exactly one production-ready authentication solution: Auth.js (NextAuth v5) with the Credentials provider, JWT sessions, and Argon2id password hashing. See DEC-001 (accepted, amended) in `docs/architecture-decisions.md` for the full decision, including the `sessionVersion` global-invalidation mechanism and the rationale for JWT over database-backed sessions.
 
 Required capabilities:
 

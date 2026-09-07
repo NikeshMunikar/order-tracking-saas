@@ -1,12 +1,15 @@
-// Prisma schema — Milestone 1 scope only.
+// Prisma schema — Milestone 1 + Milestone 2 scope.
 //
-// Only the `User` model is defined here. Per DEC-001 (accepted, amended
-// 2026-09-05), authentication uses Auth.js Credentials + JWT sessions, so no
-// `Session`, `Account`, or `VerificationToken` table is required or present.
+// M1 added the `User` model. Per DEC-001 (accepted, amended 2026-09-05),
+// authentication uses Auth.js Credentials + JWT sessions, so no `Session`,
+// `Account`, or `VerificationToken` table is required or present.
 //
-// Do not add Business, BusinessMember, Customer, Product, Order, or any
-// other domain model here — those belong to later milestones per
-// MASTER_SPEC.md §44 and docs/roadmap.md, and must not be pre-built in M1.
+// M2 adds Business, BusinessMember, and BusinessInvitation per the approved
+// M2 database design (business onboarding / settings / membership).
+//
+// Do not add Customer, Product, Order, or any other domain model here —
+// those belong to later milestones per MASTER_SPEC.md §44 and
+// docs/roadmap.md, and must not be pre-built in M2.
 //
 // Prisma 7 compatibility note: as of Prisma 7, `datasource.url` is no
 // longer supported directly in schema.prisma (P1012). Connection
@@ -49,5 +52,92 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  /// M2: a user's memberships in customer-business tenants. This is the
+  /// application-owned business-role relation (`OWNER` | `STAFF`) and is
+  /// intentionally separate from any future platform/company authorization
+  /// domain (`SUPER_ADMIN` | `ADMIN`, DEC-009) — see BusinessMember below.
+  memberships BusinessMember[]
+
   @@map("users")
+}
+
+/// M2: business-role domain. Closed to exactly OWNER | STAFF per DEC-008 /
+/// docs/database.md §3A. Never add ADMIN, SUPER_ADMIN, or any other value
+/// here — platform/company roles belong to a separate, not-yet-implemented
+/// authorization domain and must never be stored in BusinessMember.role.
+enum BusinessMemberRole {
+  OWNER
+  STAFF
+}
+
+/// M2: a tenant (customer business). Approved core-fields shape per
+/// docs/database.md §2 "Business" and the M2 implementation spec.
+model Business {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  phone       String?
+  email       String?
+  address     String?
+  description String?
+  currency    String
+  timezone    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     BusinessMember[]
+  invitations BusinessInvitation[]
+
+  @@map("businesses")
+}
+
+/// M2: membership of a User in a Business, carrying the closed business
+/// role. Uniqueness on (businessId, userId) prevents duplicate membership.
+model BusinessMember {
+  id         String             @id @default(cuid())
+  businessId String
+  userId     String
+  role       BusinessMemberRole
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([businessId, userId])
+  @@index([businessId])
+  @@index([userId])
+  @@map("business_members")
+}
+
+/// M2: invite-by-link membership invitation. Only a SHA-256 hash of the
+/// raw invitation token is ever persisted (see the invitation service) —
+/// the raw token exists only transiently in the create-invitation response.
+///
+/// IMPORTANT: at most one *database-active* invitation
+/// (`revokedAt IS NULL AND acceptedAt IS NULL`) may exist per
+/// (businessId, normalized email). Prisma's schema DSL cannot express a
+/// partial unique index, so this invariant is additionally enforced by a
+/// hand-added PostgreSQL partial unique index in the migration SQL
+/// (`business_invitations_active_email_key`). Do not remove or "simplify"
+/// that index in a future migration — it is the authoritative concurrency
+/// guard, not merely a performance index. See migration
+/// 20260907_add_business_membership for the exact DDL and rationale.
+model BusinessInvitation {
+  id         String             @id @default(cuid())
+  businessId String
+  email      String
+  role       BusinessMemberRole
+  tokenHash  String             @unique
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime           @default(now())
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, email])
+  @@index([email])
+  @@map("business_invitations")
 }

@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test \"tests/unit/**/*.test.ts\""
+    "test": "node --test \"tests/unit/**/*.test.ts\"",
+    "test:db:setup": "node tests/helpers/setup-test-db.mjs",
+    "test:integration": "node --import ./tests/helpers/register.mjs --test --test-concurrency=1 \"tests/integration/**/*.test.ts\""
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.0",

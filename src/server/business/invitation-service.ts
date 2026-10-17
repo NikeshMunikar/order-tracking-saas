@@ -6,7 +6,10 @@ import { prisma } from "@/lib/db/client";
 import { isUniqueConstraintViolation } from "@/lib/db/errors";
 import { generateSecureToken, hashToken } from "@/lib/security/token";
 import { lockBusinessOwnerRows, requireOwner } from "@/server/business/authorization";
-import { InvitationNotFoundError } from "@/server/business/errors";
+import {
+  BusinessMemberAlreadyExistsError,
+  InvitationNotFoundError,
+} from "@/server/business/errors";
 
 const INVITATION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const MAX_INVITE_ATTEMPTS = 3;
@@ -221,13 +224,23 @@ export async function acceptInvitation(
     // whole transaction — including the acceptedAt claim above — so the
     // invitation and membership state change together or not at all, per
     // the atomicity requirement.
-    await tx.businessMember.create({
-      data: {
-        businessId: invitation.businessId,
-        userId: authenticatedUserId,
-        role: invitation.role,
-      },
-    });
+    try {
+      await tx.businessMember.create({
+        data: {
+          businessId: invitation.businessId,
+          userId: authenticatedUserId,
+          role: invitation.role,
+        },
+      });
+    } catch (error) {
+      // Never let the raw Prisma error (P2002, meta, SQL detail) escape to
+      // callers — translate the one expected unique-constraint case into a
+      // sanitized domain error; rethrow anything else unchanged.
+      if (isUniqueConstraintViolation(error)) {
+        throw new BusinessMemberAlreadyExistsError();
+      }
+      throw error;
+    }
 
     return { outcome: "accepted" as const, businessId: invitation.businessId };
   });

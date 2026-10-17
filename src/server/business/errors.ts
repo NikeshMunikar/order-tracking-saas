@@ -47,3 +47,25 @@ export class InvitationNotFoundError extends Error {
     this.name = "InvitationNotFoundError";
   }
 }
+
+/**
+ * Accepting an invitation would create a membership that already exists for
+ * this (business, user). Sanitized replacement for a raw Prisma P2002 on
+ * BusinessMember's (businessId, userId) unique constraint — the underlying
+ * database error must never reach callers. Reached only in edge cases
+ * outside the normal M2 flow (a user who is already a member).
+ */
+export class BusinessMemberAlreadyExistsError extends Error {
+  constructor(message = "User is already a member of this business.") {
+    super(message);
+    this.name = "BusinessMemberAlreadyExistsError";
+  }
+}
+
+/** The user is already a member of the business. */
+export class BusinessMemberAlreadyExistsError extends Error {
+  constructor(message = "User is already a member of this business.") {
+    super(message);
+    this.name = "BusinessMemberAlreadyExistsError";
+  }
+}

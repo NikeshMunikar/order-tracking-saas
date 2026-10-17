@@ -5,7 +5,7 @@ import type { BusinessMemberRole } from "@prisma/client";
 import { prisma } from "@/lib/db/client";
 import { isUniqueConstraintViolation } from "@/lib/db/errors";
 import { generateSecureToken, hashToken } from "@/lib/security/token";
-import { requireOwner } from "@/server/business/authorization";
+import { lockBusinessOwnerRows, requireOwner } from "@/server/business/authorization";
 import { InvitationNotFoundError } from "@/server/business/errors";
 
 const INVITATION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -53,10 +53,11 @@ export async function inviteMember(
 
     try {
       const invitation = await prisma.$transaction(async (tx) => {
-        // Authorization runs inside this same transaction (see the
-        // module-level note in authorization.ts) so a concurrent
-        // demotion/removal of the acting user cannot race a stale "still
-        // OWNER" check against the invitation write.
+        // Lock every OWNER row, then re-read the acting user's role via `tx`
+        // (see lockBusinessOwnerRows): the lock prevents a concurrent
+        // demotion/removal of the acting user from passing a stale
+        // "still OWNER" check before the invitation write below.
+        await lockBusinessOwnerRows(tx, businessId);
         await requireOwner(actingUserId, businessId, tx);
 
         await tx.businessInvitation.updateMany({
@@ -80,7 +81,11 @@ export async function inviteMember(
         });
       });
 
-      return { invitationId: invitation.id, rawToken, expiresAt: invitation.expiresAt };
+      return {
+        invitationId: invitation.id,
+        rawToken,
+        expiresAt: invitation.expiresAt,
+      };
     } catch (error) {
       lastError = error;
       if (isUniqueConstraintViolation(error)) {
@@ -109,6 +114,10 @@ export async function revokeInvitation(
   invitationId: string,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    // Lock every OWNER row, then re-read the acting user's role via `tx`
+    // (see lockBusinessOwnerRows) before revoking, so a concurrent
+    // demotion/removal of the acting user cannot race this check.
+    await lockBusinessOwnerRows(tx, businessId);
     await requireOwner(actingUserId, businessId, tx);
 
     const result = await tx.businessInvitation.updateMany({
@@ -128,7 +137,10 @@ export async function revokeInvitation(
 }
 
 /** List a business's invitations (all statuses) for the team page. OWNER-only — invitation email addresses are not STAFF-visible. */
-export async function listInvitations(actingUserId: string, businessId: string) {
+export async function listInvitations(
+  actingUserId: string,
+  businessId: string,
+) {
   await requireOwner(actingUserId, businessId);
 
   return prisma.businessInvitation.findMany({
@@ -181,7 +193,9 @@ export async function acceptInvitation(
   const normalizedEmail = normalizeEmail(authenticatedUserEmail);
 
   return prisma.$transaction(async (tx) => {
-    const invitation = await tx.businessInvitation.findUnique({ where: { tokenHash } });
+    const invitation = await tx.businessInvitation.findUnique({
+      where: { tokenHash },
+    });
 
     if (!invitation || invitation.email !== normalizedEmail) {
       return { outcome: "invalid" as const };
@@ -202,14 +216,17 @@ export async function acceptInvitation(
     }
 
     // If the accepting user already has a membership row for this business
-    // (an edge case outside the normal M2 flow — see design notes in
-    // CURRENT_STATE.md/handoff), this create() hits the
+    // (an edge case outside the normal M2 flow), this create() hits the
     // (businessId, userId) unique constraint and throws, rolling back the
     // whole transaction — including the acceptedAt claim above — so the
     // invitation and membership state change together or not at all, per
     // the atomicity requirement.
     await tx.businessMember.create({
-      data: { businessId: invitation.businessId, userId: authenticatedUserId, role: invitation.role },
+      data: {
+        businessId: invitation.businessId,
+        userId: authenticatedUserId,
+        role: invitation.role,
+      },
     });
 
     return { outcome: "accepted" as const, businessId: invitation.businessId };

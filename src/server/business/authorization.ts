@@ -16,20 +16,64 @@ import { BusinessAuthorizationError, BusinessNotFoundError } from "@/server/busi
 // allowed to do* (consistent with DEC-001's reaffirmed authorization
 // source-of-truth note in docs/architecture-decisions.md).
 //
-// IMPORTANT — mutations must authorize via `tx`, not a separate
-// pre-transaction query: every function below accepts an optional
-// `client` parameter (defaulting to the top-level `prisma` client) so
-// that a mutation running inside `prisma.$transaction(async (tx) => ...)`
-// can call `requireOwner(userId, businessId, tx)` and have the
-// authorization check itself run inside that same transaction, reading
-// the same locked/consistent row it's about to act on. A standalone
-// `requireOwner(userId, businessId)` call *before* a transaction starts
-// leaves a window in which the actor's role can change (e.g. another
-// OWNER concurrently demotes or removes them) between the check and the
-// write, letting a now-unauthorized actor's mutation still go through.
-// Read-only lookups (business settings display, member listing) are fine
-// with the default top-level client — the concern is specifically
-// check-then-mutate.
+// Mutation authorization and row locking:
+//   - Every function below accepts an optional `client` parameter
+//     (defaulting to the top-level `prisma` client) so that a mutation
+//     running inside `prisma.$transaction(async (tx) => ...)` can pass
+//     `tx` and have the authorization read happen inside the same
+//     transaction. Running the check inside the transaction is necessary
+//     but NOT sufficient on its own to prevent a check-then-mutate race.
+//   - The five OWNER-only mutations in the M2 service layer
+//     (updateBusinessSettings, updateMemberRole, removeMember,
+//     inviteMember, revokeInvitation) additionally call
+//     lockBusinessOwnerRows(tx, businessId) as the first statement of
+//     their transaction and only re-read the acting user's role
+//     (requireOwner) AFTER that lock is acquired. The lock is what
+//     prevents a concurrent demotion/removal of the acting user from
+//     letting a now-unauthorized mutation pass a stale "still OWNER"
+//     check; a `tx`-scoped read without the lock would not.
+//   - acceptInvitation is a different case: the accepting user need not be
+//     an OWNER, so it does not use the owner-row lock. It relies on a
+//     single conditional UPDATE (claim) inside its transaction instead —
+//     see invitation-service.ts.
+// Read-only lookups (business settings display, member listing) use the
+// default top-level client — the concern is specifically check-then-mutate.
+
+/**
+ * Lock every OWNER row for a business within an open transaction, so
+ * concurrent OWNER-affecting mutations (settings updates, role changes,
+ * removals, invitation creation/revocation) serialize against each other
+ * instead of racing. Must be called, and its result awaited, before the
+ * acting user's role is read via requireOwner(), and before any
+ * owner-count check.
+ *
+ * Why the whole OWNER set rather than only the acting user's row: all five
+ * OWNER-only mutations share this single audited locking pattern instead of
+ * each hand-rolling a variant. Since every caller has already been
+ * *intended* to be an OWNER, the acting user's own row is necessarily part
+ * of the locked set — so their concurrent demotion/removal cannot pass a
+ * stale authorization check. (The set is also what protects the last-owner
+ * invariant in updateMemberRole()/removeMember().)
+ *
+ * Postgres re-evaluates a blocked `SELECT ... FOR UPDATE`'s WHERE clause
+ * against the latest committed row version once the lock is acquired, so
+ * two concurrent transactions targeting owners of the same business
+ * correctly serialize rather than both observing a stale count/role.
+ *
+ * Deterministic ordering: callers always invoke this as the first statement
+ * of their transaction, before touching any member or invitation row, so
+ * lock-acquisition order is consistent and cannot self-deadlock.
+ */
+export async function lockBusinessOwnerRows(
+  tx: PrismaClientOrTransaction,
+  businessId: string,
+): Promise<void> {
+  await tx.$queryRaw`
+    SELECT id FROM business_members
+    WHERE "businessId" = ${businessId} AND role = 'OWNER'
+    FOR UPDATE
+  `;
+}
 
 export type AuthorizedMembership = {
   businessId: string;

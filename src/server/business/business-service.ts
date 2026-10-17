@@ -4,10 +4,13 @@ import type { BusinessMemberRole } from "@prisma/client";
 
 import { prisma } from "@/lib/db/client";
 import { isUniqueConstraintViolation } from "@/lib/db/errors";
-import type { PrismaClientOrTransaction } from "@/lib/db/types";
 import { randomSlugSuffix, slugify } from "@/lib/business/slug";
 import type { CreateBusinessInput, UpdateBusinessSettingsInput } from "@/lib/validation/business";
-import { requireMembership, requireOwner } from "@/server/business/authorization";
+import {
+  lockBusinessOwnerRows,
+  requireMembership,
+  requireOwner,
+} from "@/server/business/authorization";
 import { BusinessMemberNotFoundError, BusinessNotFoundError, LastOwnerError } from "@/server/business/errors";
 
 const MAX_SLUG_ATTEMPTS = 5;
@@ -96,9 +99,11 @@ export async function updateBusinessSettings(
   input: UpdateBusinessSettingsInput,
 ) {
   return prisma.$transaction(async (tx) => {
-    // Authorization runs inside this same transaction (see the
-    // module-level note in authorization.ts) so a concurrent demotion of
-    // this user cannot race a stale "still OWNER" check against the write.
+    // Lock every OWNER row, then re-read the acting user's role via `tx`.
+    // The lock is what prevents a concurrent demotion/removal of this user
+    // from passing a stale "still OWNER" check (see lockBusinessOwnerRows);
+    // the `tx`-scoped read alone would not.
+    await lockBusinessOwnerRows(tx, businessId);
     await requireOwner(userId, businessId, tx);
 
     return tx.business.update({
@@ -131,27 +136,6 @@ export async function listBusinessMembers(userId: string, businessId: string) {
     },
     orderBy: { createdAt: "asc" },
   });
-}
-
-/**
- * Lock every OWNER row for a business within an open transaction, so
- * concurrent last-owner-affecting mutations (role changes, removals)
- * serialize against each other instead of racing. Must be called, and its
- * result awaited, before reading/relying on the current owner count in
- * updateMemberRole()/removeMember() below.
- *
- * Postgres re-evaluates a blocked `SELECT ... FOR UPDATE`'s WHERE clause
- * against the latest committed row version once the lock is acquired, so
- * two concurrent transactions targeting different owners of the same
- * business correctly serialize rather than both observing a stale
- * "2 owners" count.
- */
-async function lockBusinessOwnerRows(tx: PrismaClientOrTransaction, businessId: string): Promise<void> {
-  await tx.$queryRaw`
-    SELECT id FROM business_members
-    WHERE "businessId" = ${businessId} AND role = 'OWNER'
-    FOR UPDATE
-  `;
 }
 
 /**

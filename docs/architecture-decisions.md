@@ -23,15 +23,15 @@ This register records significant decisions without turning open questions into 
 | DEC-007 | Order-number sequence-generation strategy | OPEN | Orders/concurrency |
 | DEC-008 | Closed business role and security governance standard | ACCEPTED | Authorization/security |
 | DEC-009 | Separate platform/company authorization domain | ACCEPTED | Platform/business authorization separation |
-| DEC-011 | Invite-by-link invitation model | PROPOSED | Business membership/invitations |
-| DEC-012 | Invitation token hashing strategy | PROPOSED | Security/token storage |
+| DEC-011 | Invite-by-link invitation model | ACCEPTED | Business membership/invitations |
+| DEC-012 | Invitation token hashing strategy | ACCEPTED | Security/token storage |
 
 > Numbering note: `DEC-010` is intentionally skipped here. `DEC-001` already
 > refers forward to a future, not-yet-registered `DEC-010` for the
 > transactional email provider required by the password-reset flow. To avoid
-> colliding with that existing reference, the two ADRs proposed above are
-> registered as `DEC-011` and `DEC-012`. `DEC-010` remains reserved for the
-> transactional email provider.
+> colliding with that existing reference, the two ADRs above are registered as
+> `DEC-011` and `DEC-012`. `DEC-010` remains reserved for the transactional
+> email provider.
 
 ## DEC-001 — Authentication provider and identity model
 
@@ -237,9 +237,12 @@ No generic permission engine, global mixed role enum, or role hierarchy is intro
 
 ## DEC-011 — Invite-by-link invitation model
 
-**Status:** PROPOSED  
+**Status:** ACCEPTED  
 **Date:** 2026-10-17  
+**Accepted:** 2026-10-17  
 **Scope:** Business membership invitations (Milestone 2)
+
+**Acceptance record:** Accepted 2026-10-17 after verifying the decision matches the implementation: OWNER-only invite/revoke (`requireOwner`), 7-day expiry (`INVITATION_EXPIRY_MS`), 256-bit CSPRNG token (`TOKEN_BYTES = 32`), SHA-256-at-rest with no raw-token logging or persistence, and the database partial unique index `business_invitations_active_email_key`. It was also confirmed that `MASTER_SPEC.md` does not mandate these specifics (see "Source status" below).
 
 **Context:** Milestone 2 adds individual business membership using the closed business role domain (`OWNER | STAFF`, DEC-008). `MASTER_SPEC.md` requires OWNER/STAFF membership but does not prescribe how a second person is added. An invitation mechanism is needed so an existing OWNER can bring in additional OWNER or STAFF members without platform-side account creation and without any automated messaging (messaging/SMS/email are out of MVP scope; transactional email is a separate, not-yet-registered decision — see the numbering note above).
 
@@ -252,6 +255,8 @@ No generic permission engine, global mixed role enum, or role hierarchy is intro
 - Re-inviting the same `(businessId, email)` revokes the previous active invitation and issues a new one, retried (bounded) on a partial-unique collision.
 - Acceptance requires an **authenticated user whose account email equals the invitation email** (normalized). Acceptance claims the invitation with a conditional update (`acceptedAt IS NULL AND revokedAt IS NULL AND expiresAt > now()`) and creates the `BusinessMember` in the **same transaction**. A zero-row claim yields a single generic `invalid` outcome — accepted / revoked / expired / nonexistent / email-mismatch are never distinguished externally (no enrollment-state enumeration).
 
+**Source status (spec vs. implementation):** `MASTER_SPEC.md` does **not** specify an invitation mechanism, an invitation expiry, an invitation-token length, or that invite/revoke are OWNER-only. The OWNER-only restriction is *derived* from §4 (membership and settings are OWNER capabilities and are absent from the STAFF capability list), not stated explicitly. The 7-day expiry, the 256-bit token, and SHA-256-at-rest are implementation decisions recorded by this ADR, not source requirements. (Separately, §15 specifies the *public order-tracking* token — a different token with its own requirements; it does not govern invitation tokens.)
+
 **Alternatives considered:**
 
 - **Automated email delivery of the invitation** — deferred. Requires an email-provider decision (the reserved `DEC-010`); out of MVP scope and not implemented.
@@ -260,7 +265,9 @@ No generic permission engine, global mixed role enum, or role hierarchy is intro
 
 **Rationale:** Keeps identity inside the application's own database (DEC-001), adds no external service, matches the simple `OWNER | STAFF` model, and is safe under concurrency by leaning on existing database constraints rather than application pre-checks alone.
 
-**Security implications:** The token is a bearer credential — hashed at rest, single-use via conditional claim, 7-day expiry, bound to the invitee's account email. No enumeration of invitation state. Role is restricted to the closed business role domain. Authorization for invite/revoke is server-side and re-verified within the mutation transaction.
+**Consequences:** Registration in this MVP does **not** verify email ownership (DEC-001 explicitly excludes email verification / magic-link sign-in). Therefore the acceptance-time email-equality check is a *consistency* check — it confirms the accepting account's email matches the invited address — and is **not** proof that the invitee controls that mailbox. The invitation token is the effective **bearer credential**: possession of the link, combined with being authenticated as an account bearing the matching email, is what grants acceptance. A leaked invitation link should be treated as a compromised credential and revoked; delivery is out of band and depends on the creating OWNER not exposing the raw link (the raw token is shown once and never persisted or logged). Anyone able to register an account with the invited email address (subject to the authentication system's own controls) could accept an invitation intended for that address.
+
+**Security implications:** The token is a bearer credential — hashed at rest, single-use via conditional claim, 7-day expiry, bound to the invitee's account email (a consistency check, not mailbox-ownership proof, per Consequences). No enumeration of invitation state. Role is restricted to the closed business role domain. Authorization for invite/revoke is server-side and re-verified within the mutation transaction.
 
 **Operational implications:** No new external dependency. Until an email provider is decided, the OWNER must deliver the link out of band.
 
@@ -270,9 +277,14 @@ No generic permission engine, global mixed role enum, or role hierarchy is intro
 
 ## DEC-012 — Invitation token hashing strategy
 
-**Status:** PROPOSED  
+**Status:** ACCEPTED  
 **Date:** 2026-10-17  
+**Accepted:** 2026-10-17  
 **Scope:** Invitation tokens (Milestone 2); stated as the general rule for high-entropy bearer tokens
+
+**Source status (spec vs. implementation):** `MASTER_SPEC.md` does not specify a hashing algorithm for bearer tokens and does not describe invitation tokens at all. This decision resolves an implementation choice, not a source requirement.
+
+**Acceptance record:** Accepted 2026-10-17 after verifying the implementation stores only `sha256(token)` (`src/lib/security/token.ts`, `BusinessInvitation.tokenHash`) and that the raw token is never logged or persisted, and that passwords remain Argon2id (`src/lib/security/password.ts`). `DEC-010` remains reserved.
 
 **Context:** Invitation tokens are bearer credentials stored server-side. The project already uses Argon2id for passwords (`@node-rs/argon2`, per DEC-001). It must not be assumed that the password-hashing choice also applies to randomly generated tokens, or vice versa. The token store's algorithm must match the secret's entropy.
 

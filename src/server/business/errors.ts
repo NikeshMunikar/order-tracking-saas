@@ -61,11 +61,3 @@ export class BusinessMemberAlreadyExistsError extends Error {
     this.name = "BusinessMemberAlreadyExistsError";
   }
 }
-
-/** The user is already a member of the business. */
-export class BusinessMemberAlreadyExistsError extends Error {
-  constructor(message = "User is already a member of this business.") {
-    super(message);
-    this.name = "BusinessMemberAlreadyExistsError";
-  }
-}

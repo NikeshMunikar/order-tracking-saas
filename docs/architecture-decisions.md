@@ -23,6 +23,15 @@ This register records significant decisions without turning open questions into 
 | DEC-007 | Order-number sequence-generation strategy | OPEN | Orders/concurrency |
 | DEC-008 | Closed business role and security governance standard | ACCEPTED | Authorization/security |
 | DEC-009 | Separate platform/company authorization domain | ACCEPTED | Platform/business authorization separation |
+| DEC-011 | Invite-by-link invitation model | PROPOSED | Business membership/invitations |
+| DEC-012 | Invitation token hashing strategy | PROPOSED | Security/token storage |
+
+> Numbering note: `DEC-010` is intentionally skipped here. `DEC-001` already
+> refers forward to a future, not-yet-registered `DEC-010` for the
+> transactional email provider required by the password-reset flow. To avoid
+> colliding with that existing reference, the two ADRs proposed above are
+> registered as `DEC-011` and `DEC-012`. `DEC-010` remains reserved for the
+> transactional email provider.
 
 ## DEC-001 — Authentication provider and identity model
 
@@ -225,4 +234,68 @@ No generic permission engine, global mixed role enum, or role hierarchy is intro
 **Migration implications:** No implementation migration is required in the documentation-only/pre-implementation repository. The eventual platform identity/persistence schema must be explicitly decided before implementation and must not alter `BusinessMember.role`.
 
 **Reconsideration conditions:** A concrete platform requirement may refine the capability model or persistence design, but any change that merges the domains or changes the business role set requires a new/superseding ADR and cannot silently change `BusinessMember.role`.
+
+## DEC-011 — Invite-by-link invitation model
+
+**Status:** PROPOSED  
+**Date:** 2026-10-17  
+**Scope:** Business membership invitations (Milestone 2)
+
+**Context:** Milestone 2 adds individual business membership using the closed business role domain (`OWNER | STAFF`, DEC-008). `MASTER_SPEC.md` requires OWNER/STAFF membership but does not prescribe how a second person is added. An invitation mechanism is needed so an existing OWNER can bring in additional OWNER or STAFF members without platform-side account creation and without any automated messaging (messaging/SMS/email are out of MVP scope; transactional email is a separate, not-yet-registered decision — see the numbering note above).
+
+**Decision:** Use an **invite-by-link** model:
+
+- An OWNER creates an invitation for a specific email address and a role of `OWNER` or `STAFF` (the closed business role domain only). Initiating and revoking invitations are OWNER-only server-side operations.
+- The server generates the invitation token with a CSPRNG (256-bit entropy) and persists only its SHA-256 hash (`BusinessInvitation.tokenHash @unique`). The raw token is returned exactly once, to the creating OWNER, to relay out of band (e.g. as a copyable link). It is never logged and never persisted in raw form.
+- Invitations expire 7 days after creation.
+- At most one *database-active* invitation (`revokedAt IS NULL AND acceptedAt IS NULL`) may exist per `(businessId, normalized email)`. This invariant is enforced by the PostgreSQL partial unique index `business_invitations_active_email_key`, not merely by the service's revoke-then-insert sequence.
+- Re-inviting the same `(businessId, email)` revokes the previous active invitation and issues a new one, retried (bounded) on a partial-unique collision.
+- Acceptance requires an **authenticated user whose account email equals the invitation email** (normalized). Acceptance claims the invitation with a conditional update (`acceptedAt IS NULL AND revokedAt IS NULL AND expiresAt > now()`) and creates the `BusinessMember` in the **same transaction**. A zero-row claim yields a single generic `invalid` outcome — accepted / revoked / expired / nonexistent / email-mismatch are never distinguished externally (no enrollment-state enumeration).
+
+**Alternatives considered:**
+
+- **Automated email delivery of the invitation** — deferred. Requires an email-provider decision (the reserved `DEC-010`); out of MVP scope and not implemented.
+- **Non-email-bound invite code** — rejected. A code not bound to an identity lets any bearer join as the invited role; strictly weaker than binding to the invitee's account email.
+- **Manual membership creation by an OWNER** — rejected as a poor onboarding experience and inconsistent with the approved M2 shape.
+
+**Rationale:** Keeps identity inside the application's own database (DEC-001), adds no external service, matches the simple `OWNER | STAFF` model, and is safe under concurrency by leaning on existing database constraints rather than application pre-checks alone.
+
+**Security implications:** The token is a bearer credential — hashed at rest, single-use via conditional claim, 7-day expiry, bound to the invitee's account email. No enumeration of invitation state. Role is restricted to the closed business role domain. Authorization for invite/revoke is server-side and re-verified within the mutation transaction.
+
+**Operational implications:** No new external dependency. Until an email provider is decided, the OWNER must deliver the link out of band.
+
+**Migration implications:** Introduced by the M2 Stage 1 schema (`BusinessInvitation`) and migration `20260907120000_add_business_membership`. This decision requires no further migration.
+
+**Reconsideration conditions:** Adding automated email delivery (reserved `DEC-010`), introducing a different onboarding model (e.g. domain-based auto-join), or changing the single-use/expiry semantics would require revisiting this decision.
+
+## DEC-012 — Invitation token hashing strategy
+
+**Status:** PROPOSED  
+**Date:** 2026-10-17  
+**Scope:** Invitation tokens (Milestone 2); stated as the general rule for high-entropy bearer tokens
+
+**Context:** Invitation tokens are bearer credentials stored server-side. The project already uses Argon2id for passwords (`@node-rs/argon2`, per DEC-001). It must not be assumed that the password-hashing choice also applies to randomly generated tokens, or vice versa. The token store's algorithm must match the secret's entropy.
+
+**Decision:**
+
+- **High-entropy, randomly generated bearer tokens** (invitation tokens: 32 CSPRNG bytes / 256-bit entropy) are stored at rest as a **plain SHA-256 hash** (`sha256(token)`, hex). A fast cryptographic hash is correct here: the input space is far too large to brute-force, so a slow key-derivation function would add latency and denial-of-service surface without adding meaningful protection.
+- **Low-entropy, human-chosen secrets** (passwords) continue to use **Argon2id** via the approved password module (`src/lib/security/password.ts`).
+- The two are not interchangeable: SHA-256 must not be used for passwords, and Argon2id must not be used for high-entropy tokens.
+- The entropy guarantee is a precondition of this decision. It is valid only while tokens are generated with a CSPRNG at sufficient length (currently 256-bit). If any token type's entropy is reduced, this decision must be revisited before that token type ships.
+
+**Alternatives considered:**
+
+- **Argon2id for tokens** — rejected: unnecessary and slower, adding CPU/DoS cost per lookup with no brute-force benefit at 256-bit entropy.
+- **Store the raw token (no hashing)** — rejected: a database read compromise would yield directly usable, still-valid bearer tokens.
+- **No stored hash, token-as-primary-key by hash only** — subsumed by the decision (the SHA-256 hex digest is the unique lookup key, `tokenHash @unique`).
+
+**Rationale:** Match the cost of hashing to the guessability of the secret: cheap hashing where the secret is already unguessable; expensive hashing where the secret is guessable.
+
+**Security implications:** Storage is `sha256(token)`, looked up by indexed hash equality (the stored value is itself a high-entropy digest, so a fast comparison is appropriate — this is not a low-entropy secret comparison). Raw tokens must never be logged or persisted. The token generator must always use a CSPRNG with sufficient length.
+
+**Operational implications:** Token hashing is a pure function with no key management.
+
+**Migration implications:** Already reflected in the M2 Stage 1 schema (`BusinessInvitation.tokenHash @unique`); no migration required.
+
+**Reconsideration conditions:** Any low-entropy invitation/tracking token, shorter token length, or a future bearer-token type with a small input space.
 

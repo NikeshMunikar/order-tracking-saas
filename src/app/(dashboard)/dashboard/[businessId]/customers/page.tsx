@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { CUSTOMER_SEARCH_MAX_LENGTH, customerListQuerySchema } from "@/lib/validation/customer";
+import { CUSTOMER_SEARCH_MAX_LENGTH, parseCustomerListQuery } from "@/lib/validation/customer";
 import { requireSession } from "@/server/auth/session";
 import { listCustomers } from "@/server/customer/customer-service";
 
@@ -15,6 +15,12 @@ import { listCustomers } from "@/server/customer/customer-service";
  * Search covers name and phone (docs/ui-ux.md §8: "search and show at least
  * name, phone…"; docs/database.md §4 identifies phone as a customer access
  * path). The search is a plain GET form, so it needs no client JavaScript.
+ *
+ * The `q` and `page` query parameters are parsed independently (M3 audit F3):
+ * a malformed `page` falls back to page 1 with a visible notice without
+ * discarding a valid search term, and a page number past the last matching
+ * page renders an explicit out-of-range state instead of the "no customers"
+ * state or a false "Page X of Y" footer.
  *
  * NOT IMPLEMENTED HERE: the "order count" and "last order" columns described
  * in MASTER_SPEC.md §19 and docs/ui-ux.md §8. Orders do not exist until
@@ -32,9 +38,13 @@ export default async function CustomersPage({
   const { businessId } = await params;
   const rawQuery = await searchParams;
 
-  const parsed = customerListQuerySchema.safeParse({ q: rawQuery.q, page: rawQuery.page });
-  const query = parsed.success ? parsed.data : {};
-  const searchError = parsed.success ? null : (parsed.error.issues[0]?.message ?? "Invalid search.");
+  // M3 audit F3: `q` and `page` are validated independently, so a malformed
+  // `page` falls back to page 1 with a notice instead of silently discarding a
+  // valid search term (and vice versa).
+  const parsed = parseCustomerListQuery({ q: rawQuery.q, page: rawQuery.page });
+  const query = { q: parsed.q, page: parsed.page };
+  const searchError = parsed.searchError ?? null;
+  const pageError = parsed.pageError ?? null;
 
   const result = await listCustomers(session.user.id, businessId, {
     query: query.q,
@@ -104,18 +114,39 @@ export default async function CustomersPage({
         )}
       </form>
 
-      {searchError && (
-        <p role="alert" className="text-sm text-red-600">
-          {searchError}
-        </p>
+      {(searchError || pageError) && (
+        <div role="alert" className="flex flex-col gap-1 text-sm text-red-600">
+          {searchError && <p>{searchError}</p>}
+          {pageError && <p>{pageError}</p>}
+        </div>
       )}
 
       {result.customers.length === 0 ? (
-        <p className="text-sm text-neutral-500">
-          {isSearching
-            ? `No customers match “${query.q}”.`
-            : "No customers yet. Add your first customer to start creating orders for them."}
-        </p>
+        result.total > 0 ? (
+          // M3 audit F3: a page beyond the last matching page is not "no
+          // customers" — matches exist but this page is empty. Say that
+          // truthfully instead of the no-data state or a false page footer.
+          <div className="flex flex-col gap-2 text-sm text-neutral-500">
+            <p>
+              Page {result.page} is past the end of this list. There{" "}
+              {result.total === 1
+                ? "is 1 matching customer"
+                : `are ${result.total} matching customers`}{" "}
+              on {result.totalPages} {result.totalPages === 1 ? "page" : "pages"} in total.
+            </p>
+            <p>
+              <Link href={pageHref(1)} className="text-neutral-900 underline underline-offset-2">
+                Go back to page 1
+              </Link>
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-500">
+            {isSearching
+              ? `No customers match “${query.q}”.`
+              : "No customers yet. Add your first customer to start creating orders for them."}
+          </p>
+        )
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[32rem] border-collapse text-sm">
@@ -161,7 +192,7 @@ export default async function CustomersPage({
         </div>
       )}
 
-      {result.total > 0 && (
+      {result.total > 0 && result.customers.length > 0 && (
         <div className="flex items-center justify-between gap-4 text-sm text-neutral-500">
           <span>
             Page {result.page} of {result.totalPages} &middot; {result.total}{" "}

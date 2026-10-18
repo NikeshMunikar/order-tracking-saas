@@ -25,6 +25,7 @@ This register records significant decisions without turning open questions into 
 | DEC-009 | Separate platform/company authorization domain | ACCEPTED | Platform/business authorization separation |
 | DEC-011 | Invite-by-link invitation model | ACCEPTED | Business membership/invitations |
 | DEC-012 | Invitation token hashing strategy | ACCEPTED | Security/token storage |
+| DEC-013 | Order status transition and cancellation matrix (resolves AMB-002) | ACCEPTED (2026-10-18) | Orders/workflow |
 
 > Numbering note: `DEC-010` is intentionally skipped here. `DEC-001` already
 > refers forward to a future, not-yet-registered `DEC-010` for the
@@ -321,4 +322,54 @@ No generic permission engine, global mixed role enum, or role hierarchy is intro
 **Migration implications:** Already reflected in the M2 Stage 1 schema (`BusinessInvitation.tokenHash @unique`); no migration required.
 
 **Reconsideration conditions:** Any low-entropy invitation/tracking token, shorter token length, or a future bearer-token type with a small input space.
+
+## DEC-013 — Order status transition and cancellation matrix (resolves AMB-002)
+
+**Status:** ACCEPTED (2026-10-18)  
+**Date:** 2026-09-04 (recorded as ambiguity AMB-002 during state normalization)  
+**Accepted:** 2026-10-18  
+**Scope:** Milestone 6 order workflow — status transitions and cancellation
+
+**Source status (spec vs. implementation):** `MASTER_SPEC.md` §12 defines the statuses and the recommended forward workflow and states "Cancellation can occur before delivery"; it also requires "Prevent nonsensical status transitions" (its example is `DELIVERED → PREPARING`). §13 requires a history row for every status change, §28 requires invalid transitions to be rejected, and §4 grants STAFF "Update order statuses". The source does not enumerate the exact cancellation edges, so the matrix was recorded as the open ambiguity **AMB-002** and is now decided explicitly by the owner rather than chosen silently.
+
+**Decision (owner, 2026-10-18):**
+
+1. `CANCELLED` is reachable from **every** pre-delivery status: `PENDING`, `CONFIRMED`, `PREPARING`, `READY`, `OUT_FOR_DELIVERY`. Cancellation from `DELIVERED` is **not** allowed.
+2. Forward transitions move **exactly one step** along `PENDING → CONFIRMED → PREPARING → READY → OUT_FOR_DELIVERY → DELIVERED`. Skipped steps and backwards transitions are rejected.
+3. `DELIVERED` and `CANCELLED` are **terminal** — no transitions out of either state.
+4. A note on a status change (including cancellation) is **optional free text**; a cancellation reason is not required.
+5. **Both OWNER and STAFF** may update order statuses and cancel orders, subject to the existing tenant-membership and authorization checks (MASTER_SPEC §4).
+
+**Authoritative transition matrix:**
+
+| Current status | Allowed next statuses |
+|---|---|
+| `PENDING` | `CONFIRMED`, `CANCELLED` |
+| `CONFIRMED` | `PREPARING`, `CANCELLED` |
+| `PREPARING` | `READY`, `CANCELLED` |
+| `READY` | `OUT_FOR_DELIVERY`, `CANCELLED` |
+| `OUT_FOR_DELIVERY` | `DELIVERED`, `CANCELLED` |
+| `DELIVERED` | — (terminal) |
+| `CANCELLED` | — (terminal) |
+
+**Implementation:** the matrix is encoded once in `src/lib/order-status.ts` and shared by the server and the UI. The server enforces it in `updateOrderStatus` regardless of which controls the UI renders. The write is a conditional `updateMany` guarded on the expected current status inside a transaction, followed by the history insert in the same transaction, so a stale or concurrent change cannot write an incorrect history row (a losing racer receives an invalid-transition error and writes nothing). `CANCELLED` is added to the `OrderStatus` enum by migration `20261018144203_add_cancelled_order_status`. The UI offers only server-valid next statuses.
+
+**Consequences:** delivered and cancelled orders cannot be reopened or corrected through the workflow (`DELIVERED`/`CANCELLED` are final); a delivered order can never be cancelled; every accepted change appends exactly one history row. There is deliberately no backward-correction path in the product model.
+
+**Alternatives considered:**
+
+- **Narrower cancellation set** (e.g. only before `OUT_FOR_DELIVERY`) — rejected by the owner: the source says cancellation may occur at any point before delivery.
+- **Forward jumps within the chain** (e.g. `PENDING → PREPARING`) — rejected: "prevent nonsensical status transitions" and the recommended valid workflow imply step-by-step progress.
+- **Required cancellation reason** — rejected: `OrderStatusHistory.note` is nullable and requiring a reason would invent a source rule.
+- **OWNER-only cancellation** — rejected: MASTER_SPEC §4 explicitly grants STAFF "Update order statuses".
+
+**Rationale:** give the business an obvious, mobile-friendly status workflow while keeping every accepted transition explicable, auditable (one history row per change), and impossible to reverse after delivery or cancellation.
+
+**Security implications:** status changes require membership of the order's own business (tenant-scoped query + authorization); a foreign or missing order id collapses to a not-found condition, and an invalid or stale transition never produces a history record, so the audit trail cannot be corrupted by a race.
+
+**Operational implications:** status history is append-only and audit-friendly; a status change is a single transaction.
+
+**Migration implications:** one enum-value migration (`ALTER TYPE "OrderStatus" ADD VALUE 'CANCELLED'`); no table or column changes are required — `OrderStatusHistory` already stores `oldStatus`/`newStatus`/`changedBy`/`note`/`createdAt`.
+
+**Reconsideration conditions:** new product requirements for reopening/correcting orders, partial cancellation or refunds, per-role workflow refinement, or customer-initiated cancellation.
 

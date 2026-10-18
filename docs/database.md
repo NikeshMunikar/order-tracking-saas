@@ -265,7 +265,23 @@ Current statuses are:
 
 `PENDING → CONFIRMED → PREPARING → READY → OUT_FOR_DELIVERY → DELIVERED`
 
-`CANCELLED` may be entered before delivery according to the source. Invalid transitions must be rejected. The exact cancellation edge matrix remains open as AMB-002 until status implementation.
+`CANCELLED` may be entered before delivery according to the source. Invalid transitions must be rejected.
+
+**AMB-002 is RESOLVED (2026-10-18, owner-confirmed; recorded as DEC-013 in `docs/architecture-decisions.md`).** The authoritative allowed transitions are:
+
+| Current status | Allowed next statuses |
+|---|---|
+| `PENDING` | `CONFIRMED`, `CANCELLED` |
+| `CONFIRMED` | `PREPARING`, `CANCELLED` |
+| `PREPARING` | `READY`, `CANCELLED` |
+| `READY` | `OUT_FOR_DELIVERY`, `CANCELLED` |
+| `OUT_FOR_DELIVERY` | `DELIVERED`, `CANCELLED` |
+| `DELIVERED` | — (terminal) |
+| `CANCELLED` | — (terminal) |
+
+Forward progress is exactly one step (no skipped or backwards transitions); `CANCELLED` is reachable from every pre-delivery status but never from `DELIVERED`; both `DELIVERED` and `CANCELLED` are terminal, so there is no reopening/correction path. A status-change note is optional free text.
+
+The matrix is encoded once in `src/lib/order-status.ts` and enforced server-side in the order service regardless of which controls the UI renders (Milestone 6 / DEC-013).
 
 Every accepted status change updates the order's current status and appends its history record atomically.
 

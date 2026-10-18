@@ -9,10 +9,12 @@ import {
   LastOwnerError,
 } from "@/server/business/errors";
 import { CustomerNotFoundError } from "@/server/customer/errors";
+import { ProductNotFoundError } from "@/server/product/errors";
 
 /**
  * Translate an error thrown by the M2 business/membership/invitation
- * services or the M3 customer service into a safe, user-facing message.
+ * services, the M3 customer service or the M4 product service into a safe,
+ * user-facing message.
  *
  * Only messages authored here are ever shown to the browser. Any error that
  * is NOT one of the known domain conditions — including Prisma/SQL errors
@@ -32,6 +34,12 @@ export function toSafeActionMessage(error: unknown): string {
     // Same message for "no such customer", "soft-deleted" and "belongs to
     // another business" — the service deliberately collapses all three.
     return "That customer could not be found.";
+  }
+
+  if (error instanceof ProductNotFoundError) {
+    // Same message for "no such product", "soft-deleted" and "belongs to
+    // another business" — the service deliberately collapses all three.
+    return "That product could not be found.";
   }
 
   if (error instanceof BusinessAuthorizationError) {

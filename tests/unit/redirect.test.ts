@@ -49,6 +49,39 @@ test("rejects a relative path that does not start at the root", () => {
   assert.equal(safeCallbackUrl("../dashboard"), "/dashboard");
 });
 
+test("rejects dot-segment payloads that normalize to a protocol-relative path", () => {
+  // WHATWG URL parsing collapses dot segments, so each of these passes the
+  // origin check while normalizing to "//evil.com". Returning it would be a
+  // protocol-relative (open) redirect.
+  assert.equal(safeCallbackUrl("/.//evil.com"), "/dashboard");
+  assert.equal(safeCallbackUrl("/..//evil.com"), "/dashboard");
+  assert.equal(safeCallbackUrl("/a/..//evil.com"), "/dashboard");
+  assert.equal(safeCallbackUrl("/dashboard/..//evil.com"), "/dashboard");
+  assert.equal(safeCallbackUrl("/.//evil.com/phish"), "/dashboard");
+});
+
+test("still accepts dot segments that normalize to a safe same-origin path", () => {
+  assert.equal(safeCallbackUrl("/a/../dashboard"), "/dashboard");
+  assert.equal(safeCallbackUrl("/./dashboard"), "/dashboard");
+});
+
+test("leaves percent-encoded variants unchanged without promoting them to an authority", () => {
+  // These are not decoded into separators by URL parsing, so they stay
+  // same-origin paths. Pinned here so the guard is not "fixed" later by
+  // decoding untrusted input.
+  for (const payload of [
+    "/%2F%2Fevil.com",
+    "/%2f%2fevil.com",
+    "/%5Cevil.com",
+    "/%2e%2e//evil.com",
+    "/%252F%252Fevil.com",
+  ]) {
+    const result = safeCallbackUrl(payload);
+    assert.ok(result.startsWith("/"), `${payload} should stay root-relative`);
+    assert.ok(!/^\/[/\\]/.test(result), `${payload} must not become protocol-relative`);
+  }
+});
+
 test("honours a caller-supplied fallback", () => {
   assert.equal(safeCallbackUrl(undefined, "/login"), "/login");
   assert.equal(safeCallbackUrl("//evil.example", "/login"), "/login");

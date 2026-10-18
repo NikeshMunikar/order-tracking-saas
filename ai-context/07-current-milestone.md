@@ -1,6 +1,6 @@
 # Current Milestone
 
-Project phase: MILESTONE 1 ACCEPTED. MILESTONE 2 (Stages 1–3) ACCEPTED 2026-10-18 subject to the five-item security fix pack (implemented and verified). **MILESTONE 3 (Customers) ACCEPTED 2026-10-18**, including the verified F1/F2/F3 audit remediation (F4 still deferred for an owner decision). **MILESTONE 4 (Products) ACCEPTED 2026-10-18** (commits `8032278`, `4c8260e`, `0b13b67`, `942927b`, `29ae2f0`). **MILESTONE 5 (Orders) IMPLEMENTED and VERIFIED 2026-10-18 — not yet accepted** (commits `c042be0`, `2f4ef8d`, `40bc9dc`, `7a3f986`, `db70b14`, plus the owner-requested concurrency completion task `34494f3`). Do not start M6 unasked.
+Project phase: MILESTONE 1 ACCEPTED. MILESTONE 2 (Stages 1–3) ACCEPTED 2026-10-18 subject to the five-item security fix pack (implemented and verified). **MILESTONE 3 (Customers) ACCEPTED 2026-10-18**, including the verified F1/F2/F3 audit remediation (F4 still deferred for an owner decision). **MILESTONE 4 (Products) ACCEPTED 2026-10-18** (commits `8032278`, `4c8260e`, `0b13b67`, `942927b`, `29ae2f0`). **MILESTONE 5 (Orders) ACCEPTED 2026-10-18** (commits `c042be0`, `2f4ef8d`, `40bc9dc`, `7a3f986`, `db70b14`, `34494f3`; docs `7e434f3`/`d2f84c8`) — including the focused multi-connection concurrency test and the owner-confirmed DEC-007 / AMB-001 decisions. **MILESTONE 6 (Order workflow — status changes and status history) is NOT started:** its scope is identified (see the Milestone 6 section below) but it awaits the owner's approval of that scope and an **AMB-002** decision. Do not implement M6 unasked.
 
 ## What exists
 
@@ -8,7 +8,7 @@ Project phase: MILESTONE 1 ACCEPTED. MILESTONE 2 (Stages 1–3) ACCEPTED 2026-10
 - **M2 (accepted 2026-10-18, fix pack applied):** `Business` / `BusinessMember` / `BusinessInvitation` models + migration (including the hand-written partial unique index `business_invitations_active_email_key`); business/membership/invitation services in `src/server/business/**` with the `lockBusinessOwnerRows` → `requireOwner` OWNER-row pattern; business UI and Server Actions (routes `/dashboard`, `/dashboard/[businessId]`, `/settings`, `/team`, `/invite/[token]`); `[businessId]` layout authorization via `getAuthorizedBusiness` (React `cache`); safe error mapping in `action-errors.ts`; security fix pack `15f9366`..`6b6ad6a`.
 - **M3 (accepted 2026-10-18):** Customer management. `Customer` model + migration `20261018055702_add_customer`; tenant-scoped services (list with search + pagination, read, create, full-replacement update, OWNER-only soft delete); UI `/dashboard/[businessId]/customers`. Audit remediation `112d0ac` (F2), `07514bc` (F1), `e0b234f` (F3).
 - **M4 (accepted 2026-10-18):** Product management. `Product` model + migration `20261018083817_add_product` (`price DECIMAL(12,2)` per DEC-006); OWNER-only mutations behind the M2 lock pattern; product validation/services/actions/UI; DEC-006 ACCEPTED (`942927b`).
-- **M5 (implemented, verified 2026-10-18 — NOT yet accepted):** Order management.
+- **M5 (ACCEPTED 2026-10-18):** Order management.
   - Schema/migration `c042be0`: `Order`, `OrderItem`, `OrderStatusHistory`, `BusinessOrderSequence` + enums `OrderStatus` (PENDING/CONFIRMED/PREPARING/READY/OUT_FOR_DELIVERY/DELIVERED — no CANCELLED: workflow status changes and the AMB-002 cancellation matrix belong to M6), `PaymentStatus` (UNPAID/PAID/PARTIALLY_PAID/REFUNDED), `DeliveryType` (DELIVERY/PICKUP). Migration `20261018131342_add_order_domain`. Money columns are `DECIMAL(12,2)` (DEC-006). `(businessId, orderNumber)` unique composite; global unique `publicTrackingToken` (raw 256-bit base64url token — the token IS the lookup key for the M7 tracking page, unlike DEC-012-hashed invitation tokens); indexes `(businessId, createdAt)` + `(businessId, status)` + `OrderItem.orderId` + `OrderStatusHistory(orderId, createdAt)`; FKs RESTRICT. **No `deletedAt` on Order:** the approved model has no order soft-delete/deletion path.
   - DEC-007 ACCEPTED (2026-10-18, owner-confirmed, strategy (a)): per-business order-number counter `business_order_sequences`; allocation runs one atomic `INSERT … ON CONFLICT ("businessId") DO UPDATE … RETURNING` inside the creation transaction (row-locked ⇒ concurrent creations serialize); `ORD-1001`-style per-business numbers independent of internal IDs; the unique composite is the backstop. First-order rollback releases numbers (no gaps from failed creations).
   - AMB-001 RESOLVED (2026-10-18, owner-confirmed): `total = subtotal + deliveryFee − discount`, discount is a fixed NPR amount, and a discount that would drive the total below zero is REJECTED, never clamped. Arithmetic lives ONLY in `src/lib/money.ts` on BigInt minor units (`parseMinorUnits`/`formatMinorUnits`/`computeOrderTotals`/`computeLineSubtotal`) — no IEEE-754 anywhere (`7a3f986` raised the tsconfig target to ES2020 for BigInt literals).
@@ -27,13 +27,34 @@ Honest caveats: the M5 Server Actions and order UI have **no direct automated te
 
 ## Exact next task
 
-M5 is implemented, verified and documented (§3G) — **await the owner's acceptance review of Milestone 5 (Orders)**. Do not start Milestone 6 (Order workflow: status changes, status history actions) until M5 is accepted; AMB-002 (cancellation transition matrix) must be resolved before the workflow milestone is complete. F4 remains deferred for a separate owner decision (§10A).
+M5 is **ACCEPTED** (2026-10-18; `CURRENT_STATE.md` §2 M5 STATUS and §3G). The next task is **Milestone 6 (Order workflow: status changes + status history)** — scope identified below, **NOT started**. Await the owner's approval of the scope and an **AMB-002** decision before implementing; do not start M6 unasked and do not decide AMB-002 silently. F4 remains deferred for a separate owner decision (§10A).
 
 ## Not done / deferred (M5)
 
-- Order status CHANGES, transitions and any cancellation path — M6; AMB-002 (cancellation matrix) still open.
+- Order status CHANGES, transitions and any cancellation path — **M6 (next milestone; NOT started, awaits owner approval of scope + the AMB-002 decision)**.
 - Public tracking page, copy/share of the tracking link — M7 (the token already exists at creation per docs/database.md §7).
 - Order search/filter, pagination and the dashboard's order counts — M8 dashboard scope.
 - Order-creation customer/product search-driven pickers — deferred with the dashboard search/filter milestone; plain dropdowns in M5.
 - A dedicated single-field "payment status" quick action — payment status currently changes through the full edit form only.
 - Seed data per §36 — separate milestone task; audit finding **F4** still deferred for the owner.
+
+## Milestone 6 — Order workflow (prepared, NOT started)
+
+Scope identified from `MASTER_SPEC.md` §12 (statuses; "recommended valid workflow" PENDING→…→DELIVERED; "Cancellation can occur before delivery"; "Prevent nonsensical status transitions", example `DELIVERED → PREPARING` forbidden), §13 (`OrderStatusHistory` fields; "every status change must create a history record"), §28 (`updateOrderStatusSchema`; "invalid status transitions must be rejected"), §34 ("order status update must be easy on mobile"), §35 (test status transitions, cancellation, status history), §4 (STAFF may "Update order statuses"), plus `docs/roadmap.md` M6 ("Status changes and status history"), `docs/database.md` §8, and `docs/ui-ux.md` §7 ("the UI must not offer transitions that the server rejects; the server remains authoritative").
+
+Planned deliverables (nothing implemented yet):
+1. Migration adding `CANCELLED` to the `OrderStatus` enum (separate migration — Postgres `ALTER TYPE … ADD VALUE` cannot be used in the same transaction). No other schema change: `OrderStatusHistory` already has `oldStatus`/`newStatus`/`changedBy`/`note`/`createdAt`.
+2. One transition-matrix module (allowed edges + terminal states) shared by the service and the UI.
+3. `updateOrderStatus(userId, businessId, orderId, { newStatus, note? })` — membership-only (STAFF allowed per §4), tenant-scoped, atomic (status update + history insert in one transaction), and race-safe under concurrent status changes (conditional update / row lock so a losing racer gets a clean invalid-transition error, not a double history row or a lost update).
+4. `updateOrderStatusSchema` (`src/lib/validation/order.ts`) and a new invalid-transition error mapped in `src/server/business/action-errors.ts`.
+5. `updateOrderStatusAction` (Server Action) + mobile-friendly order-detail status controls offering only server-valid next statuses, an optional note, and the existing status-history display.
+6. Tests: unit (matrix) and integration (allowed/rejected edges incl. `DELIVERED → …` and out-of-`CANCELLED`, cancellation edges, terminality, tenant isolation, STAFF allowed, history rows with correct `changedBy`/`oldStatus`/`newStatus`/`note`, atomic rollback, concurrent status-change race).
+7. Docs: `CURRENT_STATE.md` §3H + acceptance, this file, `docs/database.md` §8, `docs/ui-ux.md` §7 if needed, and an ADR recording the AMB-002 resolution.
+
+Blockers requiring an owner decision before implementation:
+- **AMB-002 — cancellation matrix.** Recommended default: `CANCELLED` is reachable from every pre-delivery status (`PENDING`, `CONFIRMED`, `PREPARING`, `READY`, `OUT_FOR_DELIVERY`) and is terminal; `DELIVERED` is terminal; no post-delivery cancellation. Alternative: a narrower pre-delivery set (e.g. only before `OUT_FOR_DELIVERY`).
+- **Forward-transition strictness.** Recommended: exactly one step forward along `PENDING → CONFIRMED → PREPARING → READY → OUT_FOR_DELIVERY → DELIVERED` — no skipping, no going backwards (this inherently forbids the spec's `DELIVERED → PREPARING` example). Alternative: allow forward jumps within the chain.
+- **Cancellation note.** Recommended: optional free-text note (`OrderStatusHistory.note` is nullable; requiring a reason would be inventing a rule). Alternative: require a reason for cancellation.
+- **Who may cancel.** MASTER_SPEC §4 grants STAFF "Update order statuses", so the default is that STAFF may apply any allowed transition, including cancellation. Alternative: restrict cancellation to OWNER.
+
+Out of scope for M6 (do not resolve here): DEC-002/003/004/005, F4, §36 seed data, the public tracking page and copy/share (M7), dashboard counts / search / filter / pagination (M8).

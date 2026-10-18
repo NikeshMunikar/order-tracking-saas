@@ -11,5 +11,5 @@
 - Status + history changes must remain atomic.
 - Public tracking token is random, unpredictable, unique, and not ID-derived.
 - Authoritative money avoids binary floating-point; DEC-006 is ACCEPTED (2026-10-18): Prisma `Decimal` with `@db.Decimal(12, 2)` columns; app-visible money values are string-backed and must not be handled as JavaScript numbers. First applied to `Product.price` (M4).
-- Order-number generation must stay unique under concurrency; DEC-007 is open.
+- Order-number generation stays unique under concurrency via DEC-007 (ACCEPTED 2026-10-18, strategy (a): per-business transactional counter, allocated under a row lock with one atomic `INSERT … ON CONFLICT … DO UPDATE … RETURNING` inside the creation transaction); verified by a real multi-connection integration test (`34494f3`).
 - Growing lists use pagination and efficient query shapes; avoid N+1/full-table loading.

@@ -278,3 +278,24 @@ export async function softDeleteCustomer(
     }
   });
 }
+
+/**
+ * Options for the M5 order form's customer selector: every active customer,
+ * name-ordered, no pagination — the picker must see the WHOLE customer list,
+ * unlike the paginated customers page. Requires membership (OWNER or STAFF
+ * create orders), resolved exactly like every other read here.
+ */
+export async function listCustomerOptions(
+  userId: string,
+  businessId: string,
+): Promise<Array<{ id: string; name: string; phone: string }>> {
+  await requireMembership(userId, businessId);
+
+  const customers = await prisma.customer.findMany({
+    where: { businessId, deletedAt: null },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    select: { id: true, name: true, phone: true },
+  });
+
+  return customers;
+}

@@ -72,6 +72,12 @@ export default async function BusinessLayout({
           </Link>
         )}
         <Link
+          href={`/dashboard/${businessId}/orders`}
+          className="pb-2 text-neutral-700 hover:text-neutral-900"
+        >
+          Orders
+        </Link>
+        <Link
           href={`/dashboard/${businessId}/customers`}
           className="pb-2 text-neutral-700 hover:text-neutral-900"
         >

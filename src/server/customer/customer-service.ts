@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db/client";
+import { escapeLikePattern } from "@/lib/db/like";
 import {
   CUSTOMER_PAGE_MAX,
   type CreateCustomerInput,
@@ -112,15 +113,21 @@ export async function listCustomers(
 
   const search = normalizeSearch(params.query);
   const page = normalizePage(params.page);
+  // `%`, `_` and `\` are LIKE/ILIKE metacharacters and Prisma's string filters
+  // expose no escape option, so an unescaped search for "%" would match every
+  // customer and "_" would match any single character (M3 audit F1). Escaping
+  // here keeps the normal Prisma query API — no raw SQL — while making the
+  // search term literal. See src/lib/db/like.ts.
+  const pattern = search === undefined ? undefined : escapeLikePattern(search);
 
   const where = {
     businessId,
     deletedAt: null,
-    ...(search
+    ...(pattern
       ? {
           OR: [
-            { name: { contains: search, mode: "insensitive" as const } },
-            { phone: { contains: search } },
+            { name: { contains: pattern, mode: "insensitive" as const } },
+            { phone: { contains: pattern } },
           ],
         }
       : {}),

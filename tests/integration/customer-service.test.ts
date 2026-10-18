@@ -304,6 +304,59 @@ test("customer search matches name case-insensitively and phone, within the tena
   assert.deepEqual(noMatches.customers, []);
 });
 
+test("customer search treats LIKE metacharacters as literal text", async () => {
+  // M3 audit F1: `%`, `_` and `\` are LIKE metacharacters with no escape
+  // option in Prisma's `contains`, so the search term must be escaped or "%%"
+  // style input silently matches unrelated rows.
+  const owner = await createUser();
+  const business = await createBusinessWithOwner(owner.id, "Literal Search");
+
+  await customerRow(business.id, { name: "Percent", phone: "A%b" });
+  await customerRow(business.id, { name: "Underscore", phone: "A_b" });
+  await customerRow(business.id, { name: "Ordinary", phone: "Axb" });
+  await customerRow(business.id, { name: "Plain", phone: "plain" });
+  await customerRow(business.id, { name: "Backslash", phone: "A\\B" });
+
+  const percent = await listCustomers(owner.id, business.id, { query: "%" });
+  assert.equal(percent.total, 1, "% must match only a literal percent sign");
+  assert.equal(percent.customers[0]?.phone, "A%b");
+
+  const underscore = await listCustomers(owner.id, business.id, { query: "_" });
+  assert.equal(underscore.total, 1, "_ must match only a literal underscore");
+  assert.equal(underscore.customers[0]?.phone, "A_b");
+
+  const mixedPercent = await listCustomers(owner.id, business.id, { query: "A%b" });
+  assert.equal(mixedPercent.total, 1, "% must not act as a wildcard inside a term");
+  assert.equal(mixedPercent.customers[0]?.phone, "A%b");
+
+  const mixedUnderscore = await listCustomers(owner.id, business.id, { query: "A_b" });
+  assert.equal(mixedUnderscore.total, 1, "_ must not act as a wildcard inside a term");
+  assert.equal(mixedUnderscore.customers[0]?.phone, "A_b");
+
+  const backslash = await listCustomers(owner.id, business.id, { query: "A\\B" });
+  assert.equal(backslash.total, 1, "a backslash must match only a literal backslash");
+  assert.equal(backslash.customers[0]?.phone, "A\\B");
+
+  // Ordinary text and case-insensitive name matching are unchanged.
+  const ordinary = await listCustomers(owner.id, business.id, { query: "Axb" });
+  assert.equal(ordinary.total, 1);
+  assert.equal(ordinary.customers[0]?.phone, "Axb");
+
+  const insensitive = await listCustomers(owner.id, business.id, { query: "percent" });
+  assert.equal(insensitive.total, 1);
+  assert.equal(insensitive.customers[0]?.name, "Percent");
+
+  // Tenant scoping is unchanged: an identical phone in another business is
+  // never returned, escaped search term or not.
+  const otherOwner = await createUser();
+  const otherBusiness = await createBusinessWithOwner(otherOwner.id, "Other Literal Tenant");
+  await customerRow(otherBusiness.id, { name: "Foreign", phone: "A%b" });
+
+  const scoped = await listCustomers(owner.id, business.id, { query: "A%b" });
+  assert.equal(scoped.total, 1);
+  assert.equal(scoped.customers[0]?.name, "Percent");
+});
+
 test("the customer list is paginated and reports a bounded page size", async () => {
   const owner = await createUser();
   const business = await createBusinessWithOwner(owner.id, "Pagination");

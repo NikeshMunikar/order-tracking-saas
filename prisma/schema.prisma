@@ -8,10 +8,10 @@
 // M2 database design (business onboarding / settings / membership).
 //
 // Milestone additions so far: M3 `Customer`; M4 `Product` (per the owner's
-// DEC-006 acceptance, `price` is DECIMAL(12,2)). Do not add Order or any
-// other later-milestone domain model here — those belong to later
-// milestones per MASTER_SPEC.md §44 and docs/roadmap.md, and must not be
-// pre-built in M4.
+// DEC-006 acceptance, `price` is DECIMAL(12,2)); M5 `Order`, `OrderItem`,
+// `OrderStatusHistory`, and the DEC-007(a) per-business order-number
+// counter `BusinessOrderSequence` (accepted strategy; `Order` totals are
+// DECIMAL(12,2) money columns per DEC-006, calculated server-side only).
 //
 // Prisma 7 compatibility note: as of Prisma 7, `datasource.url` is no
 // longer supported directly in schema.prisma (P1012). Connection
@@ -92,6 +92,8 @@ model Business {
   invitations BusinessInvitation[]
   customers   Customer[]
   products    Product[]
+  orders      Order[]
+  orderSequence BusinessOrderSequence?
 
   @@map("businesses")
 }
@@ -121,6 +123,7 @@ model Customer {
   deletedAt  DateTime?
 
   business Business @relation(fields: [businessId], references: [id])
+  orders   Order[]
 
   /// List ordering (newest first per tenant) and the two documented customer
   /// access paths in docs/database.md §4 (`Customer.businessId`,
@@ -165,7 +168,8 @@ model Product {
   updatedAt   DateTime @updatedAt
   deletedAt   DateTime?
 
-  business Business @relation(fields: [businessId], references: [id])
+  business   Business    @relation(fields: [businessId], references: [id])
+  orderItems OrderItem[]
 
   /// (businessId) supports the tenant-scoped product list. (businessId,
   /// active) additionally serves the M5 order-creation picker (which reads
@@ -224,4 +228,128 @@ model BusinessInvitation {
   @@index([businessId, email])
   @@index([email])
   @@map("business_invitations")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  DELIVERED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PARTIALLY_PAID
+  REFUNDED
+}
+
+enum DeliveryType {
+  DELIVERY
+  PICKUP
+}
+
+/// M5: a business order. Every access is tenant-scoped through `businessId`
+/// (docs/database.md DB-001). Money fields are PostgreSQL decimal amounts per
+/// DEC-006 — the service layer computes and stores them server-side only, and
+/// app code must treat the string-backed values as strings (never JS numbers).
+/// `status` starts at PENDING; status *changes* and the full transition
+/// workflow belong to M6 (AMB-002 cancellation matrix is deliberately absent).
+/// The schema has no `deletedAt`: the approved order model has no soft-delete
+/// path (orders are historical financial records).
+///
+/// `orderNumber` is allocated per business at creation time through
+/// `BusinessOrderSequence` (DEC-007(a) as accepted by the owner on
+/// 2026-10-18); the composite unique below is the persistence backstop for
+/// that allocation. `publicTrackingToken` is a raw 256-bit base64url token
+/// reused from the M2 token helper: unlike invitation tokens it is looked up
+/// by value on the (later, M7) public tracking page, so it is stored raw with
+/// a global unique constraint instead of as a hash.
+model Order {
+  id                  String        @id @default(cuid())
+  businessId          String
+  customerId          String
+  orderNumber         String
+  status              OrderStatus   @default(PENDING)
+  subtotal            Decimal       @db.Decimal(12, 2)
+  discount            Decimal       @db.Decimal(12, 2)
+  deliveryFee         Decimal       @db.Decimal(12, 2)
+  total               Decimal       @db.Decimal(12, 2)
+  deliveryType        DeliveryType
+  deliveryName        String
+  deliveryPhone       String
+  deliveryAddress     String
+  estimatedDeliveryAt DateTime?
+  paymentStatus       PaymentStatus @default(UNPAID)
+  notes               String        @default("")
+  publicTrackingToken String        @unique
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  business      Business            @relation(fields: [businessId], references: [id])
+  customer      Customer            @relation(fields: [customerId], references: [id])
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+
+  @@unique([businessId, orderNumber])
+  @@index([businessId, createdAt])
+  @@index([businessId, status])
+  @@map("orders")
+}
+
+/// M5: an order line. MASTER_SPEC §10 requires the product name and unit
+/// price to be snapshotted at order time (`productNameSnapshot`, `unitPrice`)
+/// so later product edits or deletions can never rewrite history;
+/// `productId` is optional so the reference can survive product soft deletion.
+model OrderItem {
+  id                  String  @id @default(cuid())
+  orderId             String
+  productId           String?
+  productNameSnapshot String
+  unitPrice           Decimal @db.Decimal(12, 2)
+  quantity            Int
+  subtotal            Decimal @db.Decimal(12, 2)
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+/// M5: one row per valid status change (docs/database.md §8 requires an
+/// atomic write). The creation transaction writes the initial row with a
+/// null `oldStatus`; later transitions are an M6 concern.
+model OrderStatusHistory {
+  id        String       @id @default(cuid())
+  orderId   String
+  oldStatus OrderStatus?
+  newStatus OrderStatus
+  changedBy String
+  note      String?
+  createdAt DateTime     @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@map("order_status_histories")
+}
+
+/// M5: DEC-007(a) per-business order-number counter, accepted by the owner on
+/// 2026-10-18. The creation transaction allocates the next number with a
+/// single atomic statement that LOCKS and increments this row
+/// (INSERT … ON CONFLICT … DO UPDATE … RETURNING), so concurrent creations
+/// serialize; the numbers are human-readable and roughly sequential
+/// (first order = "ORD-1001") without depending on internal record IDs. The
+///unique (businessId, orderNumber) constraint on Order is the backstop.
+model BusinessOrderSequence {
+  businessId String   @id
+  lastNumber Int
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@map("business_order_sequences")
 }

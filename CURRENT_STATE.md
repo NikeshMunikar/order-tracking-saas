@@ -2,8 +2,8 @@
 
 Document Status: Active  
 Source Authority: `MASTER_SPEC.md` + approved decisions; this file records repository reality  
-Last Reviewed: 2026-10-17  
-Project Phase: MILESTONE 1 ACCEPTED; MILESTONE 2 STAGE 1 (schema) + STAGE 2 (domain/authorization) IMPLEMENTED and VERIFIED — Stage 2 remediation complete, awaiting independent re-audit; Milestone 3 not started  
+Last Reviewed: 2026-10-18  
+Project Phase: MILESTONE 1 ACCEPTED; MILESTONE 2 STAGE 1 (schema) + STAGE 2 (domain/authorization) IMPLEMENTED and VERIFIED — Stage 2 re-audited (PASS WITH MINOR FINDINGS at `ed3cf59`), findings remediated, awaiting the owner's acceptance decision; Milestone 3 not started  
 Documentation State: Generated / Specified  
 
 ## 1. State rule
@@ -16,13 +16,13 @@ This file records what is true in the repository at the time of verification. It
 
 **M1 STATUS: ACCEPTED (2026-09-06).** Full verification has now passed in the person's local development environment: `prisma generate`, `prisma validate`, `tsc --noEmit`, `npm test` (8/8), `next build`, and `prisma migrate status` (migration `20260905103000_init` applied; "Database schema is up to date!") all PASS. This closes the verification gap recorded in the M1 checkpoint history below (§3 retains that history for reference; do not delete it).
 
-**M2 STATUS: STAGE 1 + STAGE 2 IMPLEMENTED AND VERIFIED (2026-10-17) — NOT YET ACCEPTED (awaiting independent re-audit).** Milestone 2 Stage 1 (business / membership / invitation schema + migration) and Stage 2 (business authorization and membership + invitation domain services) are implemented in the repository and pass the verification recorded in §3A. They are *verified* (checks ran and passed) but not *accepted*: an independent security/governance re-audit is still required. No Milestone 2 UI or routes exist yet — Stage 2 is the server-side domain/authorization layer only. Milestone 3 has not started.
+**M2 STATUS: STAGE 1 + STAGE 2 IMPLEMENTED AND VERIFIED; RE-AUDITED 2026-10-17 (PASS WITH MINOR FINDINGS) — NOT YET ACCEPTED (awaiting the owner's acceptance decision).** Milestone 2 Stage 1 (business / membership / invitation schema + migration) and Stage 2 (business authorization and membership + invitation domain services) are implemented and pass the verification recorded in §3A. An independent security/governance re-audit at commit `ed3cf59` returned PASS WITH MINOR FINDINGS — no security defect in the code. The minor findings (a test-power gap, stale documentation, informational lock-order hardening, dependency advisories, and Stage 3 notes) are remediated by commits `1ccabe1` (lock-serialization regression test), `b50a5f1` (deterministic `ORDER BY id` lock order), and the documentation update recording this. The milestone remains *not accepted*: acceptance is the owner's decision. No Milestone 2 UI or routes exist yet — Stage 2 is the server-side domain/authorization layer only. Milestone 3 has not started.
 
-| Area | State | Evidence as of 2026-09-06 |
+| Area | State | Evidence / latest verification |
 |---|---|---|
-| Repository | Initialized, M1 ACCEPTED | This package; commits `b6bc104`..`5687693` |
+| Repository | Initialized; M1 ACCEPTED; M2 Stages 1–2 implemented and verified (not accepted) | This package; M1 checkpoint `b6bc104`..`5687693`, M2 remediation `e7f9f31`..`ed3cf59`, post-re-audit cleanup `1ccabe1`..`b50a5f1` |
 | Application implementation | **Implemented (M1 scope)** — Next.js App Router + TypeScript + Tailwind scaffold, authentication UI, protected dashboard shell | `src/app/**`, `src/components/**` |
-| Database schema | **Implemented, verified** — minimal `User` model only (`id`, `email`, `passwordHash`, `name`, `sessionVersion`, timestamps); no `Session`/`Account`/`VerificationToken`/business-domain tables. Prisma 7 config compatibility fix applied (`prisma.config.ts` + `@prisma/adapter-pg`) and CLI-verified (`prisma generate`/`validate`/`migrate status` all PASS) — see §3 | `prisma/schema.prisma`, `prisma.config.ts`, `src/lib/db/client.ts`, `prisma/migrations/20260905103000_init/` — migration confirmed applied via `prisma migrate status` ("Database schema is up to date!") in the person's local environment (see §3) |
+| Database schema | **Implemented, verified** — `User` (`id`, `email` unique, `passwordHash`, `name?`, `sessionVersion`, timestamps); `Business`; `BusinessMember`; `BusinessInvitation`; and enum `BusinessMemberRole { OWNER, STAFF }`. No `Session`/`Account`/`VerificationToken` (DEC-001 uses JWT sessions). Prisma 7 config compatibility fix applied (`prisma.config.ts` + `@prisma/adapter-pg`); two committed migrations | `prisma/schema.prisma`, `prisma/migrations/20260905103000_init/`, `prisma/migrations/20260907120000_add_business_membership/` (including the hand-written partial unique index `business_invitations_active_email_key`), `prisma.config.ts`, `src/lib/db/client.ts`; verification in §3 and §3A |
 | Authentication | **Implemented, verified** — Auth.js v5, Credentials provider, JWT sessions, `sessionVersion` global invalidation, Argon2id hashing (`@node-rs/argon2`), registration/login/logout, server-side protected-route enforcement via `requireSession()` | `src/server/auth/**`, `src/lib/security/**`, `src/lib/validation/auth.ts`, `src/types/next-auth.d.ts`; decision recorded in `docs/architecture-decisions.md` DEC-001; `tsc --noEmit` and `next build` both PASS (§3) |
 | Business management | **Implemented (M2 Stage 1 + 2), verified** — `Business` / `BusinessMember` / `BusinessInvitation` schema and migration; server-side services for business creation, settings update, member listing / role change / removal, and OWNER-only invitations; server-side authorization in every mutation | `prisma/schema.prisma`, `prisma/migrations/20260907120000_add_business_membership/`, `src/server/business/**`, `src/lib/validation/business.ts`; verification in §3A |
 | Business invitations | **Implemented (M2 Stage 2), verified** — invite-by-link model (DEC-011): 256-bit token, SHA-256 hash at rest (DEC-012), 7-day expiry, OWNER-only invite/revoke, single active invitation per (business, email) enforced by a partial unique index, acceptance by authenticated email match with a conditional claim | `src/server/business/invitation-service.ts`, `src/lib/security/token.ts`; ADRs DEC-011 / DEC-012 in `docs/architecture-decisions.md`; verification in §3A |
@@ -32,10 +32,10 @@ This file records what is true in the repository at the time of verification. It
 | Status workflow | Not Started | No implementation |
 | Public tracking | Not Started | No implementation |
 | Dashboard | **Implemented (placeholder only)** — protected shell with no business data yet | `src/app/(dashboard)/**` |
-| Automated tests | **Implemented, passing** — Node's built-in `node:test` (zero new dependency; **DEC-004 remains OPEN and is NOT resolved by this**). Unit: **22/22** (`npm test`). DB-backed integration: **27/27** (`npm run test:integration`) covering OWNER/STAFF authorization for all five OWNER-only mutations, tenant isolation, the closed business-role invariant, OWNER-row locking / re-verification, and invitation acceptance / P2002 paths | `tests/unit/**`, `tests/integration/**`, `tests/helpers/**`, `tests/README.md`; results in §3A |
+| Automated tests | **Implemented, passing** — Node's built-in `node:test` (zero new dependency; **DEC-004 remains OPEN and is NOT resolved by this**). Unit: **22/22** (`npm test`). DB-backed integration: **28/28** (`npm run test:integration`) covering OWNER/STAFF authorization for all five OWNER-only mutations, tenant isolation, the closed business-role invariant, OWNER-row locking / re-verification (including deterministic lock serialization for `updateMemberRole`/`removeMember`), and invitation acceptance / P2002 paths | `tests/unit/**`, `tests/integration/**`, `tests/helpers/**`, `tests/README.md`; results in §3A |
 | Infrastructure | Not Configured | No production provider/configuration exists |
 | Production deployment | Not Deployed | No deployment evidence |
-| Documentation | Specified, kept current through M1 checkpoint | This file, `docs/architecture-decisions.md` |
+| Documentation | Specified, kept current through M2 Stage 2 | This file, `docs/architecture-decisions.md`, `ai-context/07-current-milestone.md` |
 
 ## 3. Verification baseline
 
@@ -52,23 +52,6 @@ This file records what is true in the repository at the time of verification. It
 | Database | `order_tracking_dev` |
 
 This closes every gap identified in the sandbox-environment history below. **M1 is formally ACCEPTED as of this verification.** The history below is retained for provenance and must not be deleted or reframed as if the sandbox itself had produced these passing results — it did not; the person's separate local environment did.
-
-**M2 STAGE 2 REMEDIATION VERIFICATION (2026-10-17) — local development environment:**
-
-| Check | Command | Result |
-|---|---|---|
-| Prisma client generation | `npx prisma generate` | **PASS** (v7.10.0) |
-| Schema validation | `npx prisma validate` | **PASS** — "The schema at prisma\schema.prisma is valid" |
-| Migrations on a fresh dedicated DB | `node tests/helpers/setup-test-db.mjs` (creates `order_tracking_dev_test`, runs `prisma migrate deploy`) | **PASS** — 2 migrations found, all applied, "No pending migrations to apply" |
-| Type checking | `npx tsc --noEmit` | **PASS** — exit 0 |
-| Unit tests | `npm test` | **PASS — 22/22** |
-| Integration tests | `npm run test:integration` | **PASS — 27/27** |
-| Linting | `npm run lint` | **PASS** — exit 0 (no errors or warnings) |
-| Production build | `npm run build` (Next.js 16.3.4, Turbopack) | **PASS** — exit 0 |
-
-Last verified commit for this evidence: `ad41f1a` (the test-suite commit; the documentation update recording it is the subsequent commit). The test database `order_tracking_dev_test` is a dedicated database derived from `DATABASE_URL` by appending `_test`; it is never the development database.
-
-**Honest scope of the evidence:** these checks establish that the code type-checks, lints, builds, and that the Node tests pass against a real PostgreSQL. They do **not** constitute an independent security audit or milestone acceptance — a re-audit is still required. They also do not decide DEC-004.
 
 ---
 
@@ -94,6 +77,29 @@ Last verified commit for this evidence: `ad41f1a` (the test-suite commit; the do
 | PostgreSQL connectivity (non-destructive) | **PASS** | Direct `pg` driver connection (same driver Prisma's adapter uses) confirmed: connects to `order_tracking_dev`, lists existing tables (`users` only), confirms `_prisma_migrations` does not yet exist at that time. |
 
 **Migration bookkeeping finding (resolved):** the dev database had the correct `users` table (matching the schema) but no Prisma migration history at the time of the sandbox record above. This has since been reconciled in the person's local environment (`prisma migrate status` now reports it applied and up to date, per the acceptance verification above).
+
+## 3A. M2 Stage 2 remediation verification (2026-10-17)
+
+**M2 STAGE 2 REMEDIATION VERIFICATION (2026-10-17) — local development environment:**
+
+| Check | Command | Result |
+|---|---|---|
+| Prisma client generation | `npx prisma generate` | **PASS** (v7.10.0) |
+| Schema validation | `npx prisma validate` | **PASS** — "The schema at prisma\schema.prisma is valid" |
+| Migrations applied to the dedicated test DB | `npm run test:db:setup` (targets `order_tracking_dev_test`; runs `prisma migrate deploy`) | **PASS** — the recorded run reported the database already existed and "2 migrations found ... No pending migrations to apply"; the suite's bootstrap creates and migrates this database when it is absent. The development database `order_tracking_dev` was not touched |
+| Type checking | `npx tsc --noEmit` | **PASS** — exit 0 |
+| Unit tests | `npm test` | **PASS — 22/22** |
+| Integration tests | `npm run test:integration` | **PASS — 28/28** |
+| Linting | `npm run lint` | **PASS** — exit 0 (no errors or warnings) |
+| Production build | `npm run build` (Next.js 16.3.4, Turbopack) | **PASS** — exit 0 |
+
+Last verified commit for this evidence: `b50a5f1` (post-re-audit cleanup; the earlier remediation/test evidence was recorded at `ad41f1a`, with the documentation update as a subsequent commit). The test database `order_tracking_dev_test` is a dedicated database derived from `DATABASE_URL` by appending `_test`; it is never the development database.
+
+**Honest scope of the evidence:** these checks establish that the code type-checks, lints, builds, and that the Node tests pass against a real PostgreSQL. They do **not** constitute an independent security audit or milestone acceptance. They also do not decide DEC-004.
+
+**Re-audit (2026-10-17):** an independent read-only security/governance re-audit of M2 Stage 2 at commit `ed3cf59` returned **PASS WITH MINOR FINDINGS** — no security defect was found in the code. Findings: (1) a test-power gap (a lock-removal regression was not detectable), (2) stale documentation, (3) informational lock-order hardening, (4) dependency advisories (informational), and (5) carry-forward notes for Stage 3. Findings (1) and (3) are remediated by `1ccabe1` (lock-serialization regression test) and `b50a5f1` (deterministic `ORDER BY id` lock order); finding (2) by this documentation update. Status remains **awaiting the owner's acceptance decision** — this file does not mark Stage 2 accepted.
+
+**Known issues (recorded, not fixed):** `npm audit` reports a **critical** advisory on `next` 16.3.4 (a fix is available in 16.4.2) and several **high** advisories, mostly transitive (via `prisma` / `sharp` / `source-map-js`; `mysql2` is unused). The application does not import `next/og` and does not use `"use cache"`. A Next.js upgrade is a separate, separately-approved change (out of scope here); no dependency was changed by this cleanup.
 
 ## 4. Approved baseline, not implemented
 
@@ -195,9 +201,9 @@ These sit on top of the governance commits `4ef6c4e` (DEC-001 accepted), `163d45
 
 ## 12. Immediate next step
 
-M1 is ACCEPTED (§2, §3). Milestone 2 Stage 1 and Stage 2 are **implemented and verified but NOT yet accepted** (§2, §3A) — they await an independent security/governance re-audit.
+M1 is ACCEPTED (§2, §3). Milestone 2 Stage 1 and Stage 2 are **implemented and verified, re-audited (PASS WITH MINOR FINDINGS at `ed3cf59`), and NOT yet accepted** (§2, §3A) — acceptance is the owner's decision.
 
-1. **Await the M2 Stage 2 re-audit** and act on any findings. Remediation already committed: ADR commits `e7f9f31` and `d6ee246`; service-layer fixes `0e9f36f` (OWNER-row locking + comment accuracy), `8913078` (sanitized acceptance error), `b4ae405` (duplicate-declaration compile fix); tooling `3e20e36` (`*.bundle` ignore); committed tests `ad41f1a`.
+1. **Await the owner's M2 Stage 2 acceptance decision.** The independent re-audit (2026-10-17, at `ed3cf59`) returned PASS WITH MINOR FINDINGS; the minor findings are remediated by `1ccabe1` (lock-serialization regression test), `b50a5f1` (deterministic `ORDER BY id` lock order), and this documentation update. This file does not mark anything accepted.
 2. **Do not begin Milestone 3** until Stage 2 is accepted.
 3. Deferred, out of M2 scope and not implemented: business deletion; per-session revocation (global `sessionVersion` invalidation remains the accepted mechanism, per DEC-001).
 4. Resolve AMB-001 before final authoritative financial-calculation implementation (Milestone 5).

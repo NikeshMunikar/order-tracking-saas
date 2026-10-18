@@ -19,7 +19,7 @@ This register records significant decisions without turning open questions into 
 | DEC-003 | Production PostgreSQL provider | OPEN | Deployment/database operations |
 | DEC-004 | Unit/integration test framework | OPEN | Testing |
 | DEC-005 | Production monitoring provider | OPEN | Observability |
-| DEC-006 | Monetary storage strategy | OPEN | Database/financial correctness |
+| DEC-006 | Monetary storage strategy | ACCEPTED | Database/financial correctness |
 | DEC-007 | Order-number sequence-generation strategy | OPEN | Orders/concurrency |
 | DEC-008 | Closed business role and security governance standard | ACCEPTED | Authorization/security |
 | DEC-009 | Separate platform/company authorization domain | ACCEPTED | Platform/business authorization separation |
@@ -123,16 +123,16 @@ This register records significant decisions without turning open questions into 
 
 ## DEC-006 — Monetary storage strategy
 
-**Status:** OPEN  
+**Status:** ACCEPTED  
 **Date:** 2026-09-04  
-**Context:** Monetary values must avoid floating-point correctness problems and use a database-safe numeric/decimal approach. The exact strategy is not fully chosen.
+**Context:** Monetary values must avoid floating-point correctness problems and use a database-safe numeric/decimal approach. The strategy was selected through the ADR process by the owner on 2026-10-18, when the first monetary persistence (`Product.price`, M4) became necessary.
 
 **Alternatives considered:**
 
 - PostgreSQL `numeric/decimal` mapped through Prisma Decimal semantics.
 - Integer minor-unit representation where currency and product requirements make minor units unambiguous.
 
-**Current decision:** No strategy accepted.
+**Decision (accepted 2026-10-18):** PostgreSQL decimal storage mapped through Prisma `Decimal` — monetary columns use `@db.Decimal(12, 2)`. This is MASTER_SPEC.md §29's "appropriate decimal/money handling": fixed-scale `DECIMAL` never performs binary floating-point arithmetic, and Prisma delivers `Decimal` values to application code as string-backed values, keeping IEEE-754 doubles out of the authoritative path. Chosen over integer minor units because rupee prices in this product are decimal-native (e.g. `NPR 1800`, `NPR 700`) and a decimal representation needs no ×100 conversion in any display or future server-side total calculation; the trade-off (decimal arithmetic speed) is irrelevant at this scale. Application-visible serialization of `Decimal` must be treated as a string, not a number. `Product.price` is the first column using it; later money columns (`Order.subtotal/discount/deliveryFee/total`, `OrderItem.unitPrice/subtotal`) must use the same representation unless this decision is SUPERSEDED.
 
 **Required properties:** No authoritative binary floating-point arithmetic; deterministic server-side calculation; consistent persistence and serialization; adequate precision for the supported currency model.
 

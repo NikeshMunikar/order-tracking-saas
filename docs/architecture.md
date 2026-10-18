@@ -188,7 +188,7 @@ The public boundary must:
 
 The browser may display tentative totals, but the server independently validates inputs and recalculates authoritative monetary values before persistence.
 
-The exact monetary storage strategy is DEC-006 OPEN. The implementation must use a database-safe representation that avoids JavaScript floating-point errors for authoritative calculations.
+The exact monetary storage strategy is DEC-006 ACCEPTED (2026-10-18): PostgreSQL `DECIMAL(12, 2)` columns via Prisma `Decimal`; app-visible money values are string-backed and must never be handled as JavaScript numbers. First applied to `Product.price` (M4).
 
 The supplied MASTER_SPEC section on order calculation contains malformed presentation; see `CURRENT_STATE.md` AMB-001. Do not finalize financial semantics by silently guessing.
 

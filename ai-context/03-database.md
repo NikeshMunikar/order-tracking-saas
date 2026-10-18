@@ -10,6 +10,6 @@
 - Order creation transaction: Order + OrderItems + tracking token + initial history.
 - Status + history changes must remain atomic.
 - Public tracking token is random, unpredictable, unique, and not ID-derived.
-- Authoritative money avoids binary floating-point; DEC-006 is open for exact persistence strategy.
+- Authoritative money avoids binary floating-point; DEC-006 is ACCEPTED (2026-10-18): Prisma `Decimal` with `@db.Decimal(12, 2)` columns; app-visible money values are string-backed and must not be handled as JavaScript numbers. First applied to `Product.price` (M4).
 - Order-number generation must stay unique under concurrency; DEC-007 is open.
 - Growing lists use pagination and efficient query shapes; avoid N+1/full-table loading.

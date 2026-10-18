@@ -80,13 +80,13 @@ Customers support soft deletion where required to preserve historical relationsh
 - `businessId`
 - `name`
 - `description` nullable
-- `price`
+- `price` — `DECIMAL(12, 2)` (DEC-006 ACCEPTED; string-backed Prisma `Decimal`, never a JavaScript number)
 - `active`
 - `createdAt`
 - `updatedAt`
 - `deletedAt` nullable
 
-Inactive/soft-deleted products must not be selectable for new orders.
+Inactive/soft-deleted products must not be selectable for new orders. Inactive products remain listed for the tenant (status flag only); historical orders keep their recorded name/price snapshots regardless of later product edits.
 
 ### Order
 
@@ -220,6 +220,8 @@ Useful compound indexes include `(businessId, createdAt)`, `(businessId, status)
 
 Indexes are not to be added blindly; each should correspond to a real query pattern or constraint need.
 
+Implemented so far (matching the access paths above): `Customer` compound indexes `(businessId, createdAt)` and `(businessId, phone)`; `Product` compound indexes `(businessId, createdAt)` and `(businessId, active)` (the latter serves the active-only order-creation picker from M5).
+
 ## 5. Uniqueness and tenant integrity
 
 At minimum:
@@ -233,7 +235,7 @@ For public tracking, uniqueness is global because token-based lookup does not au
 
 ## 6. Monetary persistence
 
-The source requires database-safe money representation and avoidance of unsafe floating-point authoritative calculations. DEC-006 remains OPEN for the exact representation.
+The source requires database-safe money representation and avoidance of unsafe floating-point authoritative calculations. **DEC-006 is ACCEPTED (2026-10-18):** PostgreSQL decimals via Prisma `Decimal` — monetary columns use `@db.Decimal(12, 2)`, and app-visible `Decimal` values are string-backed and must be treated as strings, never as JavaScript numbers. First applied to `Product.price` (M4).
 
 Regardless of the final representation:
 
@@ -249,7 +251,7 @@ The supplied MASTER_SPEC order-calculation text is malformed; `CURRENT_STATE.md`
 
 Authoritative financial calculations must be performed server-side from authoritative product data and validated order inputs. Client-provided subtotal, total, price, discount, delivery fee, or payment status is never authoritative.
 
-The persisted representation must avoid binary floating-point semantics for authoritative money values. The exact strategy remains DEC-006 OPEN and must be selected through the ADR process before final financial implementation.
+The persisted representation must avoid binary floating-point semantics for authoritative money values. DEC-006 is ACCEPTED: `DECIMAL(12, 2)` monetary columns via Prisma `Decimal` (see §6). Order money columns (`subtotal`, `discount`, `deliveryFee`, `total`, `unitPrice` on items) must use the same representation when M5 implements them.
 
 ## 7. Order creation transaction
 

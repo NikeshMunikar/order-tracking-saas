@@ -8,10 +8,11 @@ import {
   InvitationNotFoundError,
   LastOwnerError,
 } from "@/server/business/errors";
+import { CustomerNotFoundError } from "@/server/customer/errors";
 
 /**
  * Translate an error thrown by the M2 business/membership/invitation
- * services into a safe, user-facing message.
+ * services or the M3 customer service into a safe, user-facing message.
  *
  * Only messages authored here are ever shown to the browser. Any error that
  * is NOT one of the known domain conditions — including Prisma/SQL errors
@@ -25,6 +26,12 @@ export function toSafeActionMessage(error: unknown): string {
     // Same message for "no such business" and "not a member": callers must
     // not be able to distinguish the two (no cross-tenant existence leak).
     return "You don't have access to this business.";
+  }
+
+  if (error instanceof CustomerNotFoundError) {
+    // Same message for "no such customer", "soft-deleted" and "belongs to
+    // another business" — the service deliberately collapses all three.
+    return "That customer could not be found.";
   }
 
   if (error instanceof BusinessAuthorizationError) {

@@ -33,12 +33,12 @@ export function assertDedicatedTestDatabase(): void {
   }
 }
 
-/** Remove every row from the M2 tables between tests. */
+/** Remove every row from the M1/M2/M3 tables between tests. */
 export async function resetDatabase(): Promise<void> {
   assertDedicatedTestDatabase();
 
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "business_invitations", "business_members", "businesses", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "customers", "business_invitations", "business_members", "businesses", "users" RESTART IDENTITY CASCADE',
   );
 }
 

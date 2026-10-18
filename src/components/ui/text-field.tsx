@@ -1,6 +1,6 @@
-import type { InputHTMLAttributes } from "react";
+import type { ComponentPropsWithRef } from "react";
 
-type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & {
+type TextFieldProps = ComponentPropsWithRef<"input"> & {
   label: string;
   name: string;
 };

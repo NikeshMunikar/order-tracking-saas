@@ -2,6 +2,7 @@
 
 import { AuthError } from "next-auth";
 
+import { safeCallbackUrl } from "@/lib/security/redirect";
 import { signIn, signOut } from "@/server/auth/config";
 
 export type LoginActionState = {
@@ -16,6 +17,10 @@ export type LoginActionState = {
  * so this function never returns a "success" state — only "idle"/"error".
  * Failure is always the same generic message regardless of whether the
  * email exists or the password was wrong (no account-existence leakage).
+ *
+ * The post-login destination comes from the untrusted `callbackUrl` field
+ * (used by the "sign in, then return" invitation flow) and is passed through
+ * safeCallbackUrl, which permits same-origin paths only.
  */
 export async function loginAction(
   _prevState: LoginActionState,
@@ -25,7 +30,7 @@ export async function loginAction(
     await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
-      redirectTo: "/dashboard",
+      redirectTo: safeCallbackUrl(formData.get("callbackUrl")),
     });
 
     return { status: "idle" };

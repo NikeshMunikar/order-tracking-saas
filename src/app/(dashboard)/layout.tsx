@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { requireSession } from "@/server/auth/session";
 import { logoutAction } from "@/server/auth/login";
 
@@ -14,7 +16,9 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-4">
-        <span className="text-sm font-semibold text-neutral-900">Order Tracking</span>
+        <Link href="/dashboard" className="text-sm font-semibold text-neutral-900">
+          Order Tracking
+        </Link>
         <div className="flex items-center gap-4">
           <span className="text-sm text-neutral-500">{session.user.email}</span>
           <form action={logoutAction}>

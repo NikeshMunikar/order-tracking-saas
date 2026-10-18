@@ -20,7 +20,7 @@ This register records significant decisions without turning open questions into 
 | DEC-004 | Unit/integration test framework | OPEN | Testing |
 | DEC-005 | Production monitoring provider | OPEN | Observability |
 | DEC-006 | Monetary storage strategy | ACCEPTED | Database/financial correctness |
-| DEC-007 | Order-number sequence-generation strategy | OPEN | Orders/concurrency |
+| DEC-007 | Order-number sequence-generation strategy | ACCEPTED (2026-10-18) | Orders/concurrency |
 | DEC-008 | Closed business role and security governance standard | ACCEPTED | Authorization/security |
 | DEC-009 | Separate platform/company authorization domain | ACCEPTED | Platform/business authorization separation |
 | DEC-011 | Invite-by-link invitation model | ACCEPTED | Business membership/invitations |
@@ -144,9 +144,20 @@ This register records significant decisions without turning open questions into 
 
 ## DEC-007 — Order-number sequence-generation strategy
 
-**Status:** OPEN  
+**Status:** ACCEPTED (2026-10-18)  
 **Date:** 2026-09-04  
+**Accepted:** 2026-10-18  
 **Context:** Order numbers must be human-readable, unique within a business, and safe under concurrent creation. The source gives `ORD-1001` as illustrative style but does not select the algorithm.
+
+**Options considered were:**
+
+1. Sequential per business, protected by transactional allocation and a unique database constraint
+2. Globally sequential, if later required
+3. Another explicitly documented strategy if product requirements change
+
+**Decision:** Option 1 — a per-business counter table (`business_order_sequences`, one row per business, `lastNumber` starting such that the first order is `ORD-1001`). Inside the order-creation transaction the next number is allocated by a single atomic `INSERT … ON CONFLICT ("businessId") DO UPDATE SET "lastNumber" = "lastNumber" + 1 RETURNING` statement; the `DO UPDATE` takes the row lock, so concurrent creations serialize and allocation is transactional (a rolled-back order creation releases its number). This satisfies the required properties: no dependency on internal database IDs, uniqueness within a business (with the `(businessId, orderNumber)` composite unique constraint as the persistence backstop), deterministic formatting (`ORD-` + counter), and concurrency safety.
+
+**Consequences:** order creation depends on the sequence row lock, so per-business throughput of order creation is serialized by design; numbers are roughly sequential per business but not guaranteed gap-free the way a global sequence would be.
 
 **Alternatives considered:**
 

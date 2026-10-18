@@ -110,9 +110,9 @@ Inactive/soft-deleted products must not be selectable for new orders. Inactive p
 - `createdAt`
 - `updatedAt`
 
-The order number (`orderNumber`) is unique within a business; the final sequence-generation method is DEC-007 OPEN.
+The order number (`orderNumber`) is unique within a business. **DEC-007 is ACCEPTED (2026-10-18, strategy (a)):** a per-business transactional counter (`business_order_sequences`), allocated under a row lock inside the order-creation transaction, rendering `ORD-1001`-style numbers with the `(businessId, orderNumber)` composite unique as backstop. See §7.
 
-`publicTrackingToken` must be unique and cryptographically secure. It must not be derived from a sequential database ID.
+`publicTrackingToken` must be unique and cryptographically secure. It must not be derived from a sequential database ID. **Implemented in M5:** a raw 256-bit base64url token from the M2 token helper (`generateSecureToken`), stored unhashed because the token itself IS the lookup key for the future public tracking page — unlike invitations (which hash at rest per DEC-012), there is no authenticated context around the lookup.
 
 ### OrderItem
 
@@ -220,7 +220,7 @@ Useful compound indexes include `(businessId, createdAt)`, `(businessId, status)
 
 Indexes are not to be added blindly; each should correspond to a real query pattern or constraint need.
 
-Implemented so far (matching the access paths above): `Customer` compound indexes `(businessId, createdAt)` and `(businessId, phone)`; `Product` compound indexes `(businessId, createdAt)` and `(businessId, active)` (the latter serves the active-only order-creation picker from M5).
+Implemented so far (matching the access paths above): `Customer` compound indexes `(businessId, createdAt)` and `(businessId, phone)`; `Product` compound indexes `(businessId, createdAt)` and `(businessId, active)` (the latter serves the active-only order-creation picker); `Order` indexes `(businessId, createdAt)` and `(businessId, status)` plus the `(businessId, orderNumber)` unique composite; `OrderItem.orderId` and `OrderStatusHistory(orderId, createdAt)` (implemented in M5).
 
 ## 5. Uniqueness and tenant integrity
 
@@ -245,17 +245,19 @@ Regardless of the final representation:
 - Values must remain deterministic through persistence and retrieval.
 - Financial calculation tests must cover positive, zero, boundary, discount, and fee cases supported by the final semantics.
 
-The supplied MASTER_SPEC order-calculation text is malformed; `CURRENT_STATE.md` AMB-001 tracks this. Do not finalize a contradictory formula silently.
+The supplied MASTER_SPEC order-calculation text is malformed; this was tracked as `CURRENT_STATE.md` AMB-001. **AMB-001 is RESOLVED (2026-10-18, owner-confirmed):** `total = subtotal + deliveryFee − discount`, where the discount is a fixed NPR amount; a discount that would drive the total below zero is REJECTED, never clamped ("Discount cannot create an invalid total"). Loading- and line-level arithmetic happens only in `src/lib/money.ts` on BigInt minor units.
 
 ## 7A. Financial correctness requirements
 
 Authoritative financial calculations must be performed server-side from authoritative product data and validated order inputs. Client-provided subtotal, total, price, discount, delivery fee, or payment status is never authoritative.
 
-The persisted representation must avoid binary floating-point semantics for authoritative money values. DEC-006 is ACCEPTED: `DECIMAL(12, 2)` monetary columns via Prisma `Decimal` (see §6). Order money columns (`subtotal`, `discount`, `deliveryFee`, `total`, `unitPrice` on items) must use the same representation when M5 implements them.
+The persisted representation must avoid binary floating-point semantics for authoritative money values. DEC-006 is ACCEPTED: `DECIMAL(12, 2)` monetary columns via Prisma `Decimal` (see §6). **The M5 order money columns (`subtotal`, `discount`, `deliveryFee`, `total`, and `unitPrice`/`subtotal` on items) use exactly this representation.**
 
 ## 7. Order creation transaction
 
 Order creation must atomically include the order, required order items, public tracking token, and initial status history. If any required write fails, the database transaction must roll back.
+
+**Implemented this way in M5:** one interactive transaction writes the order (with the DEC-007(a) allocated `orderNumber`), the item lines, the raw 256-bit `publicTrackingToken`, and the initial `OrderStatusHistory` row (`oldStatus: null`, `newStatus: PENDING`); membership is re-verified and product prices are snapshotted inside the same transaction, so nothing leaks on failure. `DEC-007` is ACCEPTED (2026-10-18, owner-confirmed strategy (a)): per-business transactional counter — the sequence row is locked and incremented by one atomic `INSERT … ON CONFLICT … DO UPDATE … RETURNING` statement, numbers render `ORD-1001`-style (first order `ORD-1001`, roughly gap-free per business), independent of internal record IDs, with the `(businessId, orderNumber)` unique composite as the persistence backstop.
 
 ## 8. Status transition integrity
 

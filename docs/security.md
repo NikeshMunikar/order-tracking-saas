@@ -271,4 +271,4 @@ The release cannot be considered security-ready until the implementation has evi
 - Safe error handling.
 - Secret handling.
 - Production HTTPS and session controls.
-- Public endpoint abuse protection assessment.
+- Public endpoint abuse protection assessment — **OPEN (not implemented).** Rate limiting / equivalent abuse protection for the public tracking route `/track/[token]` (and for sign-in / invitation acceptance) is a pre-production requirement: `MASTER_SPEC.md` §26 ("if practical"), §7 of this document, and `CURRENT_STATE.md` §10A. Milestone 7 acceptance deliberately does **not** close this item.

@@ -88,8 +88,46 @@ model Business {
 
   members     BusinessMember[]
   invitations BusinessInvitation[]
+  customers   Customer[]
 
   @@map("businesses")
+}
+
+/// M3: a tenant-owned customer record (MASTER_SPEC.md §19 / docs/database.md
+/// §2 "Customer"). `businessId` is the tenant key (DB-001) and every read or
+/// write is scoped by it through the membership-authorized service layer.
+///
+/// Deletion is SOFT (`deletedAt`): docs/database.md DB-003 and MASTER_SPEC.md
+/// §7 require historical order relationships to survive, so a customer that
+/// has ever been ordered for must never be physically removed. All normal
+/// reads filter `deletedAt IS NULL`.
+///
+/// No uniqueness constraint is defined here: the approved field list has no
+/// unique attribute (unlike Business.slug or BusinessMember's composite key),
+/// so two customers may legitimately share a name or phone number.
+model Customer {
+  id         String    @id @default(cuid())
+  businessId String
+  name       String
+  phone      String
+  email      String?
+  address    String?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  /// List ordering (newest first per tenant) and the two documented customer
+  /// access paths in docs/database.md §4 (`Customer.businessId`,
+  /// `Customer.phone`). Note that the name/phone search uses a contains match,
+  /// which cannot use a b-tree index; these indexes carry the tenant-scoped
+  /// list and exact-value lookups. No index is added for `name` because the
+  /// source does not identify it as a high-value access path.
+  @@index([businessId, createdAt])
+  @@index([businessId, phone])
+  @@map("customers")
 }
 
 /// M2: membership of a User in a Business, carrying the closed business

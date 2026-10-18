@@ -328,6 +328,13 @@ test("the last OWNER cannot be demoted or removed", async () => {
   await expectRejection(removeMember(owner.id, business.id, ownerMember.id), "LastOwnerError");
 });
 
+// NOTE (probabilistic): this test relies on real concurrent scheduling, so it
+// can pass even when the OWNER-row lock is removed — an unlocked UPDATE to a
+// row the other transaction has locked still blocks, and scheduling may hide
+// the race. It is kept as a coarse end-to-end check, but the DETERMINISTIC
+// regression coverage for the lock is the next test ("...block on the
+// OWNER-row lock and then serialize"), whose decisive assertion is the OUTCOME
+// check (exactly one succeeds; one owner remains).
 test("two concurrent demotions cannot leave the business with zero owners", async () => {
   const ownerA = await createUser();
   const ownerB = await createUser();
@@ -489,5 +496,72 @@ test("a mutation that blocks on the OWNER-row lock re-reads authorization and is
       result.error instanceof BusinessAuthorizationError,
       `${mutationName} expected BusinessAuthorizationError, got ${(result.error as Error).name}`,
     );
+  }
+});
+
+// Deterministic coverage that updateMemberRole and removeMember actually take
+// the OWNER-row lock (the probabilistic test above cannot detect its removal).
+// The decisive assertion is the OUTCOME: with the lock in place the two
+// concurrent "demote/remove the other owner" attempts serialize so exactly one
+// succeeds and one owner remains. The "does not settle while locked" check is
+// secondary, because an unlocked write to an already-locked row would also
+// block — do not read it as the proof.
+test("updateMemberRole and removeMember block on the OWNER-row lock and then serialize", async () => {
+  for (const operation of ["updateMemberRole", "removeMember"] as const) {
+    const ownerA = await createUser();
+    const ownerB = await createUser();
+    const business = await createBusinessWithOwner(ownerA.id, `Serialize ${operation}`);
+    const memberA = business.members[0];
+    const memberB = await addMember(business.id, ownerB.id, "OWNER");
+
+    let signalLockAcquired!: () => void;
+    const lockAcquired = new Promise<void>((resolve) => {
+      signalLockAcquired = resolve;
+    });
+    let releaseLock!: () => void;
+    const lockReleased = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    const blocker = prisma.$transaction(async (tx) => {
+      await lockBusinessOwnerRows(tx, business.id);
+      signalLockAcquired();
+      await lockReleased;
+    });
+    await lockAcquired;
+
+    const run = (actorId: string, targetMemberId: string) =>
+      operation === "updateMemberRole"
+        ? updateMemberRole(actorId, business.id, targetMemberId, "STAFF")
+        : removeMember(actorId, business.id, targetMemberId);
+    const settle = (p: Promise<unknown>) =>
+      p.then(
+        () => ({ ok: true as const, error: undefined as unknown }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+
+    // Each owner tries to demote/remove the other while the lock is held.
+    const first = settle(run(ownerA.id, memberB.id));
+    const second = settle(run(ownerB.id, memberA.id));
+
+    const anySettledWhileLocked = await Promise.race([
+      Promise.race([first, second]).then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
+    ]);
+    assert.equal(
+      anySettledWhileLocked,
+      false,
+      `${operation} should not settle while the OWNER-row lock is held`,
+    );
+
+    releaseLock();
+    await blocker;
+    const results = await Promise.all([first, second]);
+
+    assert.equal(results.filter((r) => r.ok).length, 1, `${operation}: exactly one should succeed`);
+    const ownerCount = await prisma.businessMember.count({
+      where: { businessId: business.id, role: "OWNER" },
+    });
+    assert.equal(ownerCount, 1, `${operation}: business must keep exactly one owner`);
   }
 });

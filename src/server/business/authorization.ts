@@ -60,9 +60,13 @@ import { BusinessAuthorizationError, BusinessNotFoundError } from "@/server/busi
  * two concurrent transactions targeting owners of the same business
  * correctly serialize rather than both observing a stale count/role.
  *
- * Deterministic ordering: callers always invoke this as the first statement
- * of their transaction, before touching any member or invitation row, so
- * lock-acquisition order is consistent and cannot self-deadlock.
+ * Deterministic lock ordering (hardening): lock-acquisition order is kept
+ * consistent by two properties — (a) callers always invoke this as the first
+ * statement of their transaction, before touching any member or invitation
+ * row, and (b) the query locks matching rows in a stable `ORDER BY id` order,
+ * so the acquisition order does not depend on the planner's row scan order.
+ * This is a defensive measure: no deadlock has been reproduced in this
+ * codebase.
  */
 export async function lockBusinessOwnerRows(
   tx: PrismaClientOrTransaction,
@@ -71,6 +75,7 @@ export async function lockBusinessOwnerRows(
   await tx.$queryRaw`
     SELECT id FROM business_members
     WHERE "businessId" = ${businessId} AND role = 'OWNER'
+    ORDER BY id
     FOR UPDATE
   `;
 }

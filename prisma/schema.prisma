@@ -237,6 +237,7 @@ enum OrderStatus {
   READY
   OUT_FOR_DELIVERY
   DELIVERED
+  CANCELLED
 }
 
 enum PaymentStatus {
@@ -255,8 +256,12 @@ enum DeliveryType {
 /// (docs/database.md DB-001). Money fields are PostgreSQL decimal amounts per
 /// DEC-006 — the service layer computes and stores them server-side only, and
 /// app code must treat the string-backed values as strings (never JS numbers).
-/// `status` starts at PENDING; status *changes* and the full transition
-/// workflow belong to M6 (AMB-002 cancellation matrix is deliberately absent).
+/// `status` starts at PENDING. Status changes follow the DEC-013 transition
+/// matrix (AMB-002 resolved 2026-10-18): exactly one step forward along
+/// PENDING → CONFIRMED → PREPARING → READY → OUT_FOR_DELIVERY → DELIVERED,
+/// `CANCELLED` reachable from any pre-delivery status, and DELIVERED/CANCELLED
+/// terminal. The matrix is enforced server-side by the order service, never by
+/// the UI alone.
 /// The schema has no `deletedAt`: the approved order model has no soft-delete
 /// path (orders are historical financial records).
 ///
@@ -319,9 +324,11 @@ model OrderItem {
   @@map("order_items")
 }
 
-/// M5: one row per valid status change (docs/database.md §8 requires an
+/// M5/M6: one row per valid status change (docs/database.md §8 requires an
 /// atomic write). The creation transaction writes the initial row with a
-/// null `oldStatus`; later transitions are an M6 concern.
+/// null `oldStatus`; later transitions (DEC-013 matrix) append their row in the
+/// same transaction as the status update, so the trail can never disagree with
+/// the order's current status.
 model OrderStatusHistory {
   id        String       @id @default(cuid())
   orderId   String

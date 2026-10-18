@@ -5,10 +5,13 @@ import {
   computeLineSubtotal,
   computeOrderTotals,
 } from "@/lib/money";
+import { canTransitionOrderStatus } from "@/lib/order-status";
+import type { OrderStatusValue } from "@/lib/order-status";
 import { generateSecureToken } from "@/lib/security/token";
 import { requireMembership } from "@/server/business/authorization";
 import {
   DeliveryFieldError,
+  InvalidOrderStatusTransitionError,
   InvalidOrderTotalsError,
   OrderNotFoundError,
   ProductUnavailableError,
@@ -17,6 +20,7 @@ import { CustomerNotFoundError } from "@/server/customer/errors";
 import type {
   CreateOrderInput,
   UpdateOrderInput,
+  UpdateOrderStatusInput,
 } from "@/lib/validation/order";
 
 // §28 cross-field rule: a DELIVERY order needs its recipient fields, decided
@@ -37,18 +41,20 @@ function validateDeliveryFields(
 // `businessId` in the WHERE clause. A browser-supplied businessId or orderId
 // is only a navigation/lookup identifier, never evidence of authorization.
 //
-// Role rules (MASTER_SPEC §4): STAFF may "view/create/update orders" (status
-// changes belong to M6), so order create/edit checks membership only — no
-// OWNER lock. There is no order-deletion path in the approved model.
+// Role rules (MASTER_SPEC §4): STAFF may "view/create/update orders" and
+// "Update order statuses" (§4 + DEC-013 rule 5), so order create/edit/status
+// changes check membership only — no OWNER lock. There is no order-deletion
+// path in the approved model.
 //
 // Money (DEC-006 + AMB-001 as reconciled 2026-10-18, fixed-amount discount,
 // `total = subtotal + deliveryFee − discount`, rejection not clamping):
 // arithmetic happens ONLY in src/lib/money.ts on BigInt minor units; values
 // cross into Prisma decimal columns as fixed-scale decimal strings.
 //
-// Status history (docs/database.md §7): the creation transaction writes the
+// Status history (docs/database.md §7–8): the creation transaction writes the
 // order, its items, the unique public tracking token, and the initial
-// PENDING history row atomically.
+// PENDING history row atomically; updateOrderStatus (M6/DEC-013) updates the
+// stored status and appends its history row in the same transaction.
 
 export type OrderListEntry = {
   id: string;
@@ -354,6 +360,73 @@ export async function updateOrder(
         total: totals.total,
       },
     });
+  });
+}
+
+export type OrderStatusChangeResult = {
+  id: string;
+  status: string;
+};
+
+/**
+ * Change an order's status (M6/DEC-013). Membership is re-verified inside the
+ * transaction and the order is read tenant-scoped, so a foreign or missing id
+ * is indistinguishable (OrderNotFoundError). The requested change must be an
+ * edge of the DEC-013 matrix from the order's STORED current status — the UI
+ * never decides this.
+ *
+ * Concurrency (docs/database.md §8, "every accepted status change updates the
+ * order and appends its history row atomically"): the update is a conditional
+ * `updateMany` whose WHERE includes the status the matrix check just read. A
+ * concurrent change therefore cannot slip through: the loser's UPDATE matches
+ * zero rows (`count !== 1`), so it throws and writes NO history row — the
+ * audit trail can never disagree with the order's stored status.
+ */
+export async function updateOrderStatus(
+  userId: string,
+  businessId: string,
+  orderId: string,
+  input: UpdateOrderStatusInput,
+): Promise<OrderStatusChangeResult> {
+  return prisma.$transaction(async (tx) => {
+    await requireMembership(userId, businessId, tx);
+
+    const order = await tx.order.findFirst({
+      where: { id: orderId, businessId },
+      select: { id: true, status: true },
+    });
+    if (!order) {
+      throw new OrderNotFoundError();
+    }
+
+    // Prisma types `status` as the enum; the matrix covers every enum member.
+    const currentStatus = order.status as OrderStatusValue;
+    if (!canTransitionOrderStatus(currentStatus, input.status)) {
+      throw new InvalidOrderStatusTransitionError();
+    }
+
+    const updated = await tx.order.updateMany({
+      where: { id: order.id, businessId, status: currentStatus },
+      data: { status: input.status },
+    });
+    if (updated.count !== 1) {
+      // The stored status changed between the read and this UPDATE (another
+      // request won the race), so this transition is stale — reject without
+      // writing history.
+      throw new InvalidOrderStatusTransitionError();
+    }
+
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId: order.id,
+        oldStatus: currentStatus,
+        newStatus: input.status,
+        changedBy: userId,
+        note: input.note ?? null,
+      },
+    });
+
+    return { id: order.id, status: input.status };
   });
 }
 

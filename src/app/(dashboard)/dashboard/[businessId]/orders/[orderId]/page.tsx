@@ -1,16 +1,20 @@
 import Link from "next/link";
 
+import { UpdateStatusForm } from "@/components/order/order-forms";
+import { isOrderStatus, nextOrderStatuses, orderStatusLabel } from "@/lib/order-status";
 import { requireSession } from "@/server/auth/session";
 import { getAuthorizedBusiness } from "@/server/business/queries";
 import { getOrder } from "@/server/order/order-service";
 
-// M5 order detail (MASTER_SPEC.md §9/§10/§12 "View"). Everything shown is the
-// stored record: money values are the server-calculated DEC-006 decimal
+// M5/M6 order detail (MASTER_SPEC.md §9/§10/§12 "View"). Everything shown is
+// the stored record: money values are the server-calculated DEC-006 decimal
 // strings, item lines are the §10 snapshots taken at order time, and the
-// status history is the §8-required audit trail. Status CHANGES are an M6
-// concern; payment status changes go through Edit. The public tracking token
-// is deliberately NOT rendered anywhere here — the customer-facing tracking
-// page/copy-share flow belongs to a later milestone.
+// status history is the §8-required audit trail. Status CHANGES use the
+// DEC-013 matrix: only the server-valid next statuses are offered (§34 mobile
+// friendly, docs/ui-ux.md §7 "the server remains authoritative"). Payment
+// status changes go through Edit. The public tracking token is deliberately
+// NOT rendered anywhere here — the customer-facing tracking page/copy-share
+// flow belongs to a later milestone.
 
 export default async function OrderDetailPage({
   params,
@@ -43,6 +47,10 @@ export default async function OrderDetailPage({
   }
 
   const listHref = `/dashboard/${businessId}/orders`;
+
+  // DEC-013: the server decides which changes are legal; the UI only renders
+  // those (terminal statuses offer nothing).
+  const nextStatuses = isOrderStatus(order.status) ? nextOrderStatuses(order.status) : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -178,7 +186,8 @@ export default async function OrderDetailPage({
         <div className="rounded-md border border-neutral-200 bg-white p-5">
           <h3 className="text-sm font-semibold text-neutral-900">Status history</h3>
           {/* docs/database.md §8: every status change writes a row; the initial
-              creation row has a null oldStatus. M6 adds the change actions. */}
+              creation row has a null oldStatus. Changes below follow the
+              DEC-013 matrix (M6). */}
           <ol className="mt-3 flex flex-col gap-2 text-sm text-neutral-700">
             {order.statusHistory.map((entry) => (
               <li key={entry.id}>
@@ -191,6 +200,18 @@ export default async function OrderDetailPage({
               </li>
             ))}
           </ol>
+          {nextStatuses.length > 0 ? (
+            <UpdateStatusForm
+              businessId={businessId}
+              orderId={order.id}
+              nextStatuses={nextStatuses}
+            />
+          ) : (
+            <p className="mt-4 border-t border-neutral-200 pt-3 text-sm text-neutral-500">
+              This order is {orderStatusLabel(order.status).toLowerCase()}; no further status
+              changes are possible.
+            </p>
+          )}
           {order.notes !== "" && (
             <p className="mt-4 border-t border-neutral-200 pt-3 text-sm text-neutral-600">
               <span className="font-medium text-neutral-700">Notes: </span>

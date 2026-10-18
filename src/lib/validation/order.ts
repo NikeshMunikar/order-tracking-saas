@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { ORDER_STATUSES } from "@/lib/order-status";
+
 // Server-side validation boundary for M5 order inputs. MASTER_SPEC.md §9/§10
 // and docs/database.md §§7–9 define the fields; §28 names the rules that are
 // encoded below ("Quantity must be positive", "Delivery fee cannot be
@@ -12,6 +14,8 @@ export const ORDER_NAME_MAX_LENGTH = 120;
 export const ORDER_PHONE_MAX_LENGTH = 30;
 export const ORDER_ADDRESS_MAX_LENGTH = 500;
 export const ORDER_NOTES_MAX_LENGTH = 500;
+/** Per-status-change note cap (optional free text; DEC-013 rule 4). */
+export const ORDER_STATUS_NOTE_MAX_LENGTH = 500;
 /** Per-order item-count cap (raw safety bound; the avg. order is small). */
 export const ORDER_MAX_ITEMS = 50;
 /** Per-item quantity cap (per-order line quantity). */
@@ -89,3 +93,24 @@ export function validateDeliveryFields(input: CreateOrderInput | UpdateOrderInpu
   }
   return undefined;
 }
+
+/**
+ * Status-change input (MASTER_SPEC §28 names `updateOrderStatusSchema`;
+ * M6/DEC-013). The target status must be a known order status, but WHICH
+ * transitions are legal is NOT decided here — that is the matrix in
+ * src/lib/order-status.ts, enforced by the service against the order's stored
+ * current status. A note (e.g. a cancellation reason) is optional free text;
+ * no reason is required (DEC-013 rule 4).
+ */
+export const updateOrderStatusSchema = z.object({
+  status: z.enum(ORDER_STATUSES, { message: "Status is required" }),
+  note: z
+    .string()
+    .trim()
+    .max(ORDER_STATUS_NOTE_MAX_LENGTH, "Status note is too long")
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (value === "" ? undefined : value)),
+});
+
+export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;

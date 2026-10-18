@@ -3,9 +3,11 @@ import { test } from "node:test";
 
 import {
   ORDER_MAX_ITEMS,
+  ORDER_STATUS_NOTE_MAX_LENGTH,
   createOrderSchema,
   orderItemInputSchema,
   updateOrderSchema,
+  updateOrderStatusSchema,
 } from "../../src/lib/validation/order.ts";
 import {
   computeLineSubtotal,
@@ -210,4 +212,50 @@ test("updateOrderSchema mirrors create shape without customerId (full edit)", ()
   // NOT NULL with default '').
   assert.equal(update.data.notes, undefined, "absent notes must normalise to undefined");
   assert.equal("customerId" in update.data, false);
+});
+
+test("updateOrderStatusSchema accepts a status plus an optional note (DEC-013)", () => {
+  // The schema validates the SHAPE only; which transitions are legal is the
+  // service's matrix check against the order's stored status.
+  const withNote = updateOrderStatusSchema.safeParse({ status: "CANCELLED", note: "  Customer called  " });
+  if (!withNote.success) assert.fail("expected a status change with a note to parse");
+  assert.equal(withNote.data.status, "CANCELLED");
+  assert.equal(withNote.data.note, "Customer called");
+
+  // A note is optional free text: absent and empty both normalise to undefined,
+  // and no reason is ever required.
+  assert.equal(updateOrderStatusSchema.safeParse({ status: "CONFIRMED" }).success, true);
+  const empty = updateOrderStatusSchema.safeParse({ status: "CONFIRMED", note: "" });
+  if (!empty.success) assert.fail("expected an empty note to parse");
+  assert.equal(empty.data.note, undefined);
+
+  // Every approved status is accepted as a target status.
+  for (const status of [
+    "PENDING",
+    "CONFIRMED",
+    "PREPARING",
+    "READY",
+    "OUT_FOR_DELIVERY",
+    "DELIVERED",
+    "CANCELLED",
+  ]) {
+    assert.equal(updateOrderStatusSchema.safeParse({ status }).success, true, `status ${status}`);
+  }
+
+  // Unknown/missing statuses are rejected.
+  assert.equal(updateOrderStatusSchema.safeParse({ status: "SHIPPED" }).success, false);
+  assert.equal(updateOrderStatusSchema.safeParse({ status: "cancelled" }).success, false);
+  assert.equal(updateOrderStatusSchema.safeParse({}).success, false);
+
+  // The note is bounded (a raw safety cap, not a business rule).
+  assert.equal(
+    updateOrderStatusSchema.safeParse({ status: "CANCELLED", note: "x".repeat(ORDER_STATUS_NOTE_MAX_LENGTH) })
+      .success,
+    true,
+  );
+  assert.equal(
+    updateOrderStatusSchema.safeParse({ status: "CANCELLED", note: "x".repeat(ORDER_STATUS_NOTE_MAX_LENGTH + 1) })
+      .success,
+    false,
+  );
 });

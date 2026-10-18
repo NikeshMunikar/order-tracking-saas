@@ -34,3 +34,16 @@ export class InvalidOrderTotalsError extends Error {
     super("Order totals are invalid.");
   }
 }
+
+/// The requested status change is not permitted by the DEC-013 matrix for the
+/// order's stored current status — a skipped/backwards/self transition, a
+/// change out of a terminal status, or a stale request whose expected status
+/// changed concurrently. §28: invalid transitions must be rejected; a rejected
+/// change writes no status and no history row.
+export class InvalidOrderStatusTransitionError extends Error {
+  readonly name = "InvalidOrderStatusTransitionError";
+
+  constructor() {
+    super("That status change is not allowed.");
+  }
+}

@@ -5,14 +5,22 @@ import { useRouter } from "next/navigation";
 
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
-import { createOrderAction, updateOrderAction } from "@/server/order/actions";
+import { orderStatusLabel } from "@/lib/order-status";
+import type { OrderStatusValue } from "@/lib/order-status";
+import {
+  createOrderAction,
+  updateOrderAction,
+  updateOrderStatusAction,
+} from "@/server/order/actions";
 import type {
   CreateOrderActionState,
   UpdateOrderActionState,
+  UpdateOrderStatusActionState,
 } from "@/server/order/action-states";
 
 const initialCreateState: CreateOrderActionState = { status: "idle" };
 const initialUpdateState: UpdateOrderActionState = { status: "idle" };
+const initialUpdateStatusState: UpdateOrderStatusActionState = { status: "idle" };
 
 // Per-order line cap mirrors src/lib/validation/order.ts (ORDER_ITEM_QUANTITY_MAX).
 const ITEM_QUANTITY_MAX = 999;
@@ -369,6 +377,95 @@ export function EditOrderForm({
       )}
 
       <SubmitButton>Save changes</SubmitButton>
+    </form>
+  );
+}
+
+/**
+ * Status change controls (M6/DEC-013). Only the statuses the server would
+ * accept from the order's CURRENT status are offered (docs/ui-ux.md §7: "The
+ * UI must not offer transitions that the server rejects. The server remains
+ * authoritative.") — each option is a submit button whose value is the target
+ * status, so a hand-crafted request is still re-validated by the service.
+ * Terminal orders render no controls at all.
+ */
+export function UpdateStatusForm({
+  businessId,
+  orderId,
+  nextStatuses,
+}: {
+  businessId: string;
+  orderId: string;
+  nextStatuses: OrderStatusValue[];
+}) {
+  const [state, formAction, isPending] = useActionState(
+    updateOrderStatusAction,
+    initialUpdateStatusState,
+  );
+  const [noteDraft, setNoteDraft] = useState("");
+
+  // After a successful change the field shows empty again (the submitted note
+  // belongs to the change that just happened, not to the next one). Derived
+  // rather than cleared in an effect: resetting controlled state from an
+  // effect body is an anti-pattern the lint rules reject.
+  const note = state.status === "success" ? "" : noteDraft;
+
+  if (nextStatuses.length === 0) {
+    return null;
+  }
+
+  return (
+    <form action={formAction} className="mt-4 flex flex-col gap-3 border-t border-neutral-200 pt-4">
+      <input type="hidden" name="businessId" value={businessId} />
+      <input type="hidden" name="orderId" value={orderId} />
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="status-note" className="text-sm font-medium text-neutral-700">
+          Note (optional)
+        </label>
+        <input
+          id="status-note"
+          name="note"
+          type="text"
+          autoComplete="off"
+          value={note}
+          onChange={(event) => setNoteDraft(event.target.value)}
+          className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
+        />
+      </div>
+
+      {/* One button per allowed next status: easy on mobile (§34) and no
+          invalid option can be submitted from the UI. */}
+      <div className="flex flex-wrap gap-2">
+        {nextStatuses.map((status) => (
+          <button
+            key={status}
+            type="submit"
+            name="status"
+            value={status}
+            disabled={isPending}
+            className={
+              status === "CANCELLED"
+                ? "rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                : "rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-60"
+            }
+          >
+            {status === "CANCELLED" ? "Cancel order" : `Mark ${orderStatusLabel(status).toLowerCase()}`}
+          </button>
+        ))}
+      </div>
+
+      {state.status === "error" && (
+        <p role="alert" className="text-sm text-red-600">
+          {state.message}
+        </p>
+      )}
+
+      {state.status === "success" && (
+        <p role="status" className="text-sm text-green-700">
+          Status updated to {orderStatusLabel(state.orderStatus)}.
+        </p>
+      )}
     </form>
   );
 }

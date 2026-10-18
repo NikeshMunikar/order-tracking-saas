@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createOrderSchema, updateOrderSchema } from "@/lib/validation/order";
+import { createOrderSchema, updateOrderSchema, updateOrderStatusSchema } from "@/lib/validation/order";
 import { requireSession } from "@/server/auth/session";
 import { toSafeActionMessage } from "@/server/business/action-errors";
-import { createOrder, updateOrder } from "@/server/order/order-service";
+import { createOrder, updateOrder, updateOrderStatus } from "@/server/order/order-service";
 import type {
   CreateOrderActionState,
   UpdateOrderActionState,
+  UpdateOrderStatusActionState,
 } from "@/server/order/action-states";
 
 // Server Actions for the M5 order UI. Same contract as the M3/M4 actions:
@@ -114,6 +115,46 @@ export async function updateOrderAction(
     revalidatePath(`/dashboard/${businessId}/orders`);
     revalidatePath(`/dashboard/${businessId}/orders/${orderId}`);
     return { status: "success" };
+  } catch (error) {
+    return { status: "error", message: toSafeActionMessage(error) };
+  }
+}
+
+/**
+ * Status change (M6/DEC-013). The browser supplies only the target status and
+ * an optional note; whether that change is legal is decided by the service
+ * against the order's stored status, so a stale or hand-crafted request is
+ * rejected exactly like an invalid one (MASTER_SPEC §28; docs/ui-ux.md §7
+ * "The server remains authoritative").
+ */
+export async function updateOrderStatusAction(
+  _prevState: UpdateOrderStatusActionState,
+  formData: FormData,
+): Promise<UpdateOrderStatusActionState> {
+  const session = await requireSession();
+
+  const businessId = readRequiredString(formData, "businessId");
+  const orderId = readRequiredString(formData, "orderId");
+  if (!businessId || !orderId) {
+    return { status: "error", message: "Missing order." };
+  }
+
+  const parsed = updateOrderStatusSchema.safeParse({
+    status: formData.get("status"),
+    note: formData.get("note"),
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Invalid input.",
+    };
+  }
+
+  try {
+    const changed = await updateOrderStatus(session.user.id, businessId, orderId, parsed.data);
+    revalidatePath(`/dashboard/${businessId}/orders`);
+    revalidatePath(`/dashboard/${businessId}/orders/${orderId}`);
+    return { status: "success", orderStatus: changed.status };
   } catch (error) {
     return { status: "error", message: toSafeActionMessage(error) };
   }

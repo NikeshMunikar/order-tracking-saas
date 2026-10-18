@@ -12,6 +12,7 @@ import { CustomerNotFoundError } from "@/server/customer/errors";
 import { ProductNotFoundError } from "@/server/product/errors";
 import {
   DeliveryFieldError,
+  InvalidOrderStatusTransitionError,
   InvalidOrderTotalsError,
   OrderNotFoundError,
   ProductUnavailableError,
@@ -64,6 +65,13 @@ export function toSafeActionMessage(error: unknown): string {
     // AMB-001 (as resolved 2026-10-18): the discount may never drive the
     // total below zero; the input is rejected, not clamped.
     return "The discount cannot exceed the order amount.";
+  }
+
+  if (error instanceof InvalidOrderStatusTransitionError) {
+    // DEC-013 (accepted 2026-10-18): the matrix, not the UI, decides which
+    // status changes are legal; a stale/concurrent change is rejected the same
+    // way as a skipped or backwards one so no history row is written.
+    return error.message;
   }
 
   if (error instanceof DeliveryFieldError) {

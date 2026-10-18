@@ -7,3 +7,8 @@ export type UpdateOrderActionState =
   | { status: "idle" }
   | { status: "error"; message: string }
   | { status: "success" };
+
+export type UpdateOrderStatusActionState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "success"; orderStatus: string };

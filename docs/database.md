@@ -112,7 +112,7 @@ Inactive/soft-deleted products must not be selectable for new orders. Inactive p
 
 The order number (`orderNumber`) is unique within a business. **DEC-007 is ACCEPTED (2026-10-18, strategy (a)):** a per-business transactional counter (`business_order_sequences`), allocated under a row lock inside the order-creation transaction, rendering `ORD-1001`-style numbers with the `(businessId, orderNumber)` composite unique as backstop. See §7.
 
-`publicTrackingToken` must be unique and cryptographically secure. It must not be derived from a sequential database ID. **Implemented in M5:** a raw 256-bit base64url token from the M2 token helper (`generateSecureToken`), stored unhashed because the token itself IS the lookup key for the future public tracking page — unlike invitations (which hash at rest per DEC-012), there is no authenticated context around the lookup.
+`publicTrackingToken` must be unique and cryptographically secure. It must not be derived from a sequential database ID. **Implemented in M5:** a raw 256-bit base64url token from the M2 token helper (`generateSecureToken`), stored unhashed because the token itself IS the lookup key for the public tracking page — unlike invitations (which hash at rest per DEC-012), there is no authenticated context around the lookup. **Implemented in M7:** that lookup is now live — `getPublicTrackingOrder` resolves by this column (map `Order.publicTrackingToken`) and returns only the deliberately limited customer-facing DTO described in §8A.
 
 ### OrderItem
 
@@ -284,6 +284,12 @@ Forward progress is exactly one step (no skipped or backwards transitions); `CAN
 The matrix is encoded once in `src/lib/order-status.ts` and enforced server-side in the order service regardless of which controls the UI renders (Milestone 6 / DEC-013).
 
 Every accepted status change updates the order's current status and appends its history record atomically.
+
+## 8A. Public tracking read path (M7)
+
+The only unauthenticated read of order data is the public tracking page `/track/[token]` (MASTER_SPEC §15–§16, `docs/security.md` SEC-004). It resolves an order **by the globally unique raw `Order.publicTrackingToken`** — there is no session, no tenant parameter, and no business/order/customer identifier accepted from the browser: the token itself is the authorization. A malformed token and an unknown token produce the same generic invalid state (§33), so responses cannot be used to probe which tokens exist.
+
+The response is a **deliberate DTO, not a raw database record** (SEC-006). Implemented in `src/server/tracking/tracking-service.ts`: `prisma.order.findUnique({ where: { publicTrackingToken } })` selects only the business name/logo/phone/address/currency, the order number, status, timestamps, delivery type/name/address, the DEC-006 money columns, the item snapshot lines, and the status-history `newStatus`/`createdAt` needed for the timeline. Internal record IDs (order, item, product, customer, business), the customer's `email`/`notes`, the order's `notes`, the status-history `note` and `changedBy` (staff identity), and the raw token itself are **never** returned, and the token is never logged. The paths that do access tenant data (`getOrder` and the rest of the order service) remain membership-gated as in M5/M6.
 
 ## 9. Historical data integrity
 

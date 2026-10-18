@@ -156,6 +156,8 @@ Public tracking links are bearer-style access to intentionally limited data. The
 
 Rate limiting or equivalent abuse protection must be evaluated before production release and implemented where required by the security review.
 
+**Implemented in M7 (`ad560f5`).** The route is `/track/[token]` (server component, no session). `src/server/tracking/tracking-service.ts` (`getPublicTrackingOrder`) looks the order up by the globally unique raw `Order.publicTrackingToken` — no business, order or customer identifier is accepted from the browser, and the token is the authorization. It returns a deliberate DTO built by an explicit `select`, so exactly the approved fields above cross the boundary and the forbidden list is structurally absent (verified by an integration test that asserts the returned key sets and sweeps the serialized response for internal ids, the customer's email/phone/notes, the order notes, a status-history note, the acting user id and the raw token). A malformed token and an unknown token both return `null` and render the same generic invalid-link state, so responses cannot be used to probe token existence; no raw database or server error is ever rendered, and the raw token is never logged. The token's properties are satisfied by the M5 storage: 32 CSPRNG bytes (256-bit) base64url from `src/lib/security/token.ts`, with a global unique constraint on the column. **Not implemented:** rate limiting / equivalent abuse protection for this route — recorded as a pre-production item in `CURRENT_STATE.md` §10A and required before production release.
+
 ## 8. Validation
 
 Use Zod for server-side validation of important inputs. Validation includes, as applicable:

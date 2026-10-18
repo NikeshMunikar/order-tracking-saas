@@ -1,6 +1,6 @@
 # Current Milestone
 
-Project phase: MILESTONE 1 ACCEPTED. MILESTONE 2 (Stages 1–3) ACCEPTED 2026-10-18 subject to the five-item security fix pack (implemented and verified). MILESTONE 3 (Customers) implemented, verified and read-only audited at `e2061b0`, with F1/F2/F3 remediated and verified — **not yet accepted** (audit F4 deferred for an owner decision). **MILESTONE 4 (Products) IMPLEMENTED and VERIFIED 2026-10-18 — not yet accepted.** Do not start M5 unasked.
+Project phase: MILESTONE 1 ACCEPTED. MILESTONE 2 (Stages 1–3) ACCEPTED 2026-10-18 subject to the five-item security fix pack (implemented and verified). **MILESTONE 3 (Customers) ACCEPTED 2026-10-18**, including the verified F1/F2/F3 audit remediation (F4 still deferred for an owner decision). **MILESTONE 4 (Products) ACCEPTED 2026-10-18** (commits `8032278`, `4c8260e`, `0b13b67`, `942927b`, `29ae2f0`). Active milestone: **M5 (Orders)** — do not start M6 unasked.
 
 ## What exists
 
@@ -26,7 +26,7 @@ Honest caveats: the M4 Server Actions and product UI have **no direct automated 
 
 ## Exact next task
 
-Await the **owner's** review / acceptance of Milestone 4 (Products) — and, independently, the owner's M3 acceptance decision (F1/F2/F3 remediated and verified; F4 deferred pending an owner decision: `process.exit(1)` after the fail-fast log vs documenting a host health check). **Do not start Milestone 5 (Orders) unasked, and do not mark anything accepted yourself.**
+M3 (incl. the F1/F2/F3 remediation) and M4 were **ACCEPTED by the owner on 2026-10-18** (remediation commits `112d0ac`/`07514bc`/`e0b234f`/`69b2dc2`; M4 commits `8032278`/`4c8260e`/`0b13b67`/`942927b`/`29ae2f0`). The active milestone is now **Milestone 5 (Orders)**: implement the approved M5 scope in one coherent pass (schema/migration, order services, validation, Server Actions, UI, order items, status history) following DEC-006 money handling and the established authorization/soft-delete patterns — **without silently resolving DEC-007 (order-number generation) or AMB-001 (order-calculation formula wording)**; ask the owner if either genuinely blocks. F4 remains deferred for a separate owner decision. Do not start M6.
 
 ## Not done / deferred (M4)
 

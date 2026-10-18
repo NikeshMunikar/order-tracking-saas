@@ -462,3 +462,55 @@ export async function listOrders(userId: string, businessId: string): Promise<Or
     createdAt: order.createdAt,
   }));
 }
+
+export type CustomerOrderEntry = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  total: string;
+  createdAt: Date;
+};
+
+/**
+ * A customer's order history (MASTER_SPEC §19 "Order History": ORD-1042,
+ * ORD-1031, … newest first — here with status/total/link context). Requires
+ * membership; a customerId outside the tenant is indistinguishable from a
+ * soft-deleted one (CustomerNotFoundError), matching the create path.
+ * Deliberately without pagination: a single customer's history is bounded in
+ * practice; revisit only if a profile grows beyond MVP scale.
+ */
+export async function listCustomerOrders(
+  userId: string,
+  businessId: string,
+  customerId: string,
+): Promise<CustomerOrderEntry[]> {
+  await requireMembership(userId, businessId);
+
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, businessId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!customer) {
+    throw new CustomerNotFoundError();
+  }
+
+  const orders = await prisma.order.findMany({
+    where: { businessId, customerId },
+    orderBy: [{ createdAt: "desc" }, { orderNumber: "desc" }],
+    select: {
+      id: true,
+      orderNumber: true,
+      status: true,
+      total: true,
+      createdAt: true,
+    },
+  });
+
+  return orders.map((order) => ({
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    total: order.total.toFixed(2),
+    createdAt: order.createdAt,
+  }));
+}

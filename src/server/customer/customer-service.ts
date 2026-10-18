@@ -49,6 +49,10 @@ export type CustomerListItem = {
   phone: string;
   email: string | null;
   createdAt: Date;
+  /** M5 (§19): how many orders this customer has (any status). */
+  ordersCount: number;
+  /** M5 (§19): the most recent order, or null when the customer has none. */
+  lastOrder: { orderNumber: string; createdAt: Date } | null;
 };
 
 export type CustomerListResult = {
@@ -136,7 +140,23 @@ export async function listCustomers(
   const [customers, total] = await prisma.$transaction([
     prisma.customer.findMany({
       where,
-      select: { id: true, name: true, phone: true, email: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        createdAt: true,
+        // M5 (§19): the "Orders" count and "Last Order" columns. The nested
+        // take-1 offers (createdAt, orderNumber) — orderNumber is monotonic
+        // per business (DEC-007), so same-millisecond creations still order
+        // deterministically.
+        _count: { select: { orders: true } },
+        orders: {
+          orderBy: [{ createdAt: "desc" }, { orderNumber: "desc" }],
+          take: 1,
+          select: { orderNumber: true, createdAt: true },
+        },
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * CUSTOMER_PAGE_SIZE,
       take: CUSTOMER_PAGE_SIZE,
@@ -145,7 +165,15 @@ export async function listCustomers(
   ]);
 
   return {
-    customers,
+    customers: customers.map((customer) => ({
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+      createdAt: customer.createdAt,
+      ordersCount: customer._count.orders,
+      lastOrder: customer.orders[0] ?? null,
+    })),
     total,
     page,
     pageSize: CUSTOMER_PAGE_SIZE,

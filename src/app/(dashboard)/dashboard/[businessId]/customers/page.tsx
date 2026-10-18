@@ -22,10 +22,9 @@ import { listCustomers } from "@/server/customer/customer-service";
  * page renders an explicit out-of-range state instead of the "no customers"
  * state or a false "Page X of Y" footer.
  *
- * NOT IMPLEMENTED HERE: the "order count" and "last order" columns described
- * in MASTER_SPEC.md §19 and docs/ui-ux.md §8. Orders do not exist until
- * milestone 5, so there is no authoritative source for those values and they
- * are deliberately omitted rather than rendered as fabricated zeros.
+ * The "Orders" count and "Last Order" columns from MASTER_SPEC.md §19 /
+ * docs/ui-ux.md §8 were added in milestone 5, once the `Order` model
+ * (and the DEC-007 order numbers they reference) existed.
  */
 export default async function CustomersPage({
   params,
@@ -162,6 +161,12 @@ export default async function CustomersPage({
                 <th scope="col" className="hidden py-2 pr-4 sm:table-cell">
                   Email
                 </th>
+                <th scope="col" className="py-2 pr-4">
+                  Orders
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Last Order
+                </th>
                 <th scope="col" className="py-2">
                   Added
                 </th>
@@ -181,6 +186,12 @@ export default async function CustomersPage({
                   <td className="py-3 pr-4 text-neutral-700">{customer.phone}</td>
                   <td className="hidden py-3 pr-4 text-neutral-700 sm:table-cell">
                     {customer.email ?? "—"}
+                  </td>
+                  <td className="py-3 pr-4 text-neutral-700">{customer.ordersCount}</td>
+                  <td className="py-3 pr-4 text-neutral-700">
+                    {customer.lastOrder
+                      ? `${customer.lastOrder.orderNumber} · ${customer.lastOrder.createdAt.toLocaleDateString()}`
+                      : "—"}
                   </td>
                   <td className="py-3 text-neutral-500">
                     {customer.createdAt.toLocaleDateString()}

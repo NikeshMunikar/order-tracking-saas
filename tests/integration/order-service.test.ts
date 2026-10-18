@@ -14,6 +14,7 @@ import {
 import {
   createOrder,
   getOrder,
+  listCustomerOrders,
   listOrders,
   updateOrder,
 } from "../../src/server/order/order-service.ts";
@@ -464,8 +465,7 @@ test("missing delivery recipient fields on a DELIVERY order is a clean domain er
   );
 });
 
-test("rollback restores nothing when any write in the creation transaction fails", async () => {
-  const owner = await createUser();
+test("rollback restores nothing when any write in the creation transaction fails", async () => {  const owner = await createUser();
   const business = await createBusinessWithOwner(owner.id, "Rollback Co");
   const customer = await prisma.customer.create({
     data: { businessId: business.id, name: "Ram Sharma", phone: "9800000001" },
@@ -495,4 +495,50 @@ test("rollback restores nothing when any write in the creation transaction fails
     items: [{ productId: product.id, quantity: 1 }],
   }));
   assert.equal(retry.orderNumber, "ORD-1001");
+});
+
+test("listCustomerOrders returns a tenant-safe, newest-first history", async () => {
+  const owner = await createUser();
+  const business = await createBusinessWithOwner(owner.id, "History Co");
+  const customer = await prisma.customer.create({
+    data: { businessId: business.id, name: "Sita Thapa", phone: "9811111111" },
+  });
+  const product = await createProduct(owner.id, business.id, {
+    name: "Cake", description: undefined, price: "500", active: true,
+  });
+
+  const first = await createOrder(owner.id, business.id, orderInput({
+    customerId: customer.id,
+    items: [{ productId: product.id, quantity: 1 }],
+    deliveryFee: "0",
+  }));
+  const second = await createOrder(owner.id, business.id, orderInput({
+    customerId: customer.id,
+    items: [{ productId: product.id, quantity: 2 }],
+    deliveryFee: "0",
+  }));
+
+  const history = await listCustomerOrders(owner.id, business.id, customer.id);
+  assert.equal(history.length, 2);
+  assert.deepEqual(
+    history.map((order) => order.orderNumber),
+    [second.orderNumber, first.orderNumber],
+  );
+  assert.equal(history[1]?.total, "500.00");
+
+  // Cross-tenant customerId is indistinguishable from soft-deleted.
+  const otherBusiness = await createBusinessWithOwner((await createUser()).id, "Other Co");
+  await expectRejection(
+    listCustomerOrders(owner.id, business.id, (await prisma.customer.create({
+      data: { businessId: otherBusiness.id, name: "Foreign", phone: "000" },
+    })).id),
+    CustomerNotFoundError.name,
+  );
+
+  // A deleted customer's history is not reachable either (soft-delete
+  // preserves rows but the profile entry points treat them as gone).
+  await expectRejection(
+    listCustomerOrders(owner.id, business.id, "nonexistent"),
+    CustomerNotFoundError.name,
+  );
 });

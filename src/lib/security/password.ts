@@ -14,6 +14,20 @@ const HASH_OPTIONS = {
 } as const;
 
 /**
+ * A fixed, precomputed Argon2id hash of a throwaway value, used ONLY to give
+ * the "no such user" branch of credential authorization the same cost as the
+ * "wrong password" branch. Without it, a missing user returns immediately
+ * while a present user pays the full Argon2id verification — a measurable
+ * difference an attacker can use to enumerate accounts through login timing.
+ *
+ * It is generated with the same HASH_OPTIONS as real hashes (m=19456, t=2,
+ * p=1) and must be regenerated if those parameters change. It is not a
+ * credential for any account and no account may be created with it.
+ */
+export const DUMMY_PASSWORD_HASH =
+  "$argon2id$v=19$m=19456,t=2,p=1$DlfxiEgSKQZoad3iLPLLHw$PrsEJzwmDctpLlqH2SDEJ+nA1xYTvXBC/zww3Bi+NvM";
+
+/**
  * Hash a plaintext password with Argon2id. Never store the plaintext or a
  * weaker hash anywhere.
  */

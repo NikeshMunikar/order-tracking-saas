@@ -15,8 +15,13 @@ export type LoginActionState = {
  *
  * On success, Auth.js redirects (throws a NEXT_REDIRECT signal internally),
  * so this function never returns a "success" state — only "idle"/"error".
- * Failure is always the same generic message regardless of whether the
- * email exists or the password was wrong (no account-existence leakage).
+ * Failure is always the same generic message whether the email exists or the
+ * password was wrong, and the provider equalizes the cost of both branches,
+ * so sign-in does not reveal whether an account exists.
+ *
+ * Account existence is NOT hidden overall: registration reports an
+ * already-registered email and there is no email-verification step
+ * (DEC-001). Do not claim otherwise.
  *
  * The post-login destination comes from the untrusted `callbackUrl` field
  * (used by the "sign in, then return" invitation flow) and is passed through

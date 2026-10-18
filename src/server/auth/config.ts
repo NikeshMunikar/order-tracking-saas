@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 import { prisma } from "@/lib/db/client";
-import { verifyPassword } from "@/lib/security/password";
+import { DUMMY_PASSWORD_HASH, verifyPassword } from "@/lib/security/password";
 import { loginSchema } from "@/lib/validation/auth";
 import { isSessionVersionCurrent } from "@/lib/security/session-version";
 
@@ -49,11 +49,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { email },
         });
 
-        // Generic failure path: do not distinguish "no such user" from
-        // "wrong password" — both return null, which Auth.js surfaces as a
-        // single generic authentication failure. No account-existence
-        // leakage.
+        // Generic failure path: "no such user" and "wrong password" both
+        // return null, which Auth.js surfaces as one generic authentication
+        // failure.
+        //
+        // The unknown-email branch still runs a real Argon2id verification —
+        // against a fixed dummy hash with the same cost parameters — so the
+        // two branches take comparable time and login response timing does
+        // not reveal whether the email exists.
+        //
+        // This does NOT hide account existence overall: registration reports
+        // an already-registered email and there is no email-verification step
+        // (DEC-001), so existence remains probeable through registration. See
+        // the DEC-001 consequences in docs/architecture-decisions.md.
         if (!user) {
+          await verifyPassword(DUMMY_PASSWORD_HASH, password);
           return null;
         }
 

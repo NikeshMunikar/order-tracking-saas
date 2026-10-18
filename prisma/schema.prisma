@@ -7,9 +7,11 @@
 // M2 adds Business, BusinessMember, and BusinessInvitation per the approved
 // M2 database design (business onboarding / settings / membership).
 //
-// Do not add Customer, Product, Order, or any other domain model here —
-// those belong to later milestones per MASTER_SPEC.md §44 and
-// docs/roadmap.md, and must not be pre-built in M2.
+// Milestone additions so far: M3 `Customer`; M4 `Product` (per the owner's
+// DEC-006 acceptance, `price` is DECIMAL(12,2)). Do not add Order or any
+// other later-milestone domain model here — those belong to later
+// milestones per MASTER_SPEC.md §44 and docs/roadmap.md, and must not be
+// pre-built in M4.
 //
 // Prisma 7 compatibility note: as of Prisma 7, `datasource.url` is no
 // longer supported directly in schema.prisma (P1012). Connection
@@ -89,6 +91,7 @@ model Business {
   members     BusinessMember[]
   invitations BusinessInvitation[]
   customers   Customer[]
+  products    Product[]
 
   @@map("businesses")
 }
@@ -128,6 +131,49 @@ model Customer {
   @@index([businessId, createdAt])
   @@index([businessId, phone])
   @@map("customers")
+}
+
+/// M4: a tenant-owned product the business sells (MASTER_SPEC.md §8
+/// "Product", Milestone 4 "Products: CRUD, Active/inactive"). `businessId`
+/// is the tenant key (DB-001) and every read or write is scoped by it
+/// through the membership-authorized service layer.
+///
+/// `price` is DECIMAL(12,2) per the owner's accepted DEC-006 ("Prisma
+/// Decimal"): a PostgreSQL decimal representation, not binary floating
+/// point. BUSINESS.currency carries the display currency symbol; DECIMAL
+/// stores only the numeric amount, so switching currencies later does not
+/// require restoring existing values.
+///
+/// `active` implements MASTER_SPEC.md "Active/inactive": inactive products
+/// are never added to NEW orders (an M5 order-creation filter), and an
+/// existing product being deactivated does NOT mutate historical orders
+/// (M5 order items snapshot productName/unitPrice per MASTER_SPEC.md
+/// §10, enforced at order time).
+///
+/// `deletedAt` is soft-delete (DB-003) for the same reason as Customer:
+/// an order item names a product that must remain resolvable, and it must
+/// not appear as a sellable item. A deleted product is filtered out of
+/// every list/read.
+model Product {
+  id          String   @id @default(cuid())
+  businessId  String
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(12, 2)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  /// (businessId) supports the tenant-scoped product list. (businessId,
+  /// active) additionally serves the M5 order-creation picker (which reads
+  /// only ACTIVE products). No index on `name`: product count per tenant is
+  /// small for this MVP and no source requirement asks a name index.
+  @@index([businessId, createdAt])
+  @@index([businessId, active])
+  @@map("products")
 }
 
 /// M2: membership of a User in a Business, carrying the closed business

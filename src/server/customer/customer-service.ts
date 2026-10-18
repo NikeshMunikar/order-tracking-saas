@@ -1,9 +1,10 @@
 import "server-only";
 
 import { prisma } from "@/lib/db/client";
-import type {
-  CreateCustomerInput,
-  UpdateCustomerInput,
+import {
+  CUSTOMER_PAGE_MAX,
+  type CreateCustomerInput,
+  type UpdateCustomerInput,
 } from "@/lib/validation/customer";
 import {
   lockBusinessOwnerRows,
@@ -68,8 +69,21 @@ export type CustomerDetail = {
   updatedAt: Date;
 };
 
+/**
+ * Defense in depth for the page number. Request validation already bounds it
+ * (see CUSTOMER_PAGE_MAX), but the service must never compute a `skip` outside
+ * the range Prisma/PostgreSQL accept: a huge page would otherwise surface as an
+ * unhandled Prisma error during a render. Anything that is not a whole number
+ * in [1, CUSTOMER_PAGE_MAX] is treated as page 1 — the same fallback the
+ * existing "unparseable page" behaviour already used.
+ */
 function normalizePage(page: number | undefined): number {
-  if (typeof page !== "number" || !Number.isInteger(page) || page < 1) {
+  if (
+    typeof page !== "number" ||
+    !Number.isInteger(page) ||
+    page < 1 ||
+    page > CUSTOMER_PAGE_MAX
+  ) {
     return 1;
   }
 

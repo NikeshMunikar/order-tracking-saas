@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  CUSTOMER_PAGE_MAX,
   CUSTOMER_SEARCH_MAX_LENGTH,
   createCustomerSchema,
   customerListQuerySchema,
+  parseCustomerListQuery,
   updateCustomerSchema,
 } from "../../src/lib/validation/customer.ts";
 
@@ -163,4 +165,64 @@ test("customerListQuerySchema ignores repeated query parameters instead of faili
   if (!parsed.success) assert.fail("expected repeated query parameters to be ignored");
   assert.equal(parsed.data.q, undefined);
   assert.equal(parsed.data.page, undefined);
+});
+
+test("customerListQuerySchema bounds the page number", () => {
+  // Regression (M3 audit F2): `z.number().int()` is not itself a bound —
+  // Number.isInteger(1e21) is true — so a huge page reached the service and
+  // overflowed Prisma's `skip`, surfacing as an unhandled Prisma error.
+  assert.equal(
+    customerListQuerySchema.safeParse({ page: String(CUSTOMER_PAGE_MAX) }).success,
+    true,
+  );
+  assert.equal(
+    customerListQuerySchema.safeParse({ page: String(CUSTOMER_PAGE_MAX + 1) }).success,
+    false,
+  );
+
+  for (const page of ["1e6", "1e21", "2147483648", "9007199254740991"]) {
+    assert.equal(
+      customerListQuerySchema.safeParse({ page }).success,
+      false,
+      `page "${page}" should be rejected`,
+    );
+  }
+});
+
+test("parseCustomerListQuery validates the search term and page independently", () => {
+  // M3 audit F3: a malformed `page` must not discard a valid search term.
+  const badPage = parseCustomerListQuery({ q: "ram", page: "abc" });
+  assert.equal(badPage.q, "ram");
+  assert.equal(badPage.page, undefined);
+  assert.equal(badPage.searchError, undefined);
+  assert.ok(badPage.pageError);
+
+  const badSearch = parseCustomerListQuery({
+    q: "a".repeat(CUSTOMER_SEARCH_MAX_LENGTH + 1),
+    page: "2",
+  });
+  assert.equal(badSearch.q, undefined);
+  assert.equal(badSearch.page, 2);
+  assert.equal(badSearch.searchError, "Search text is too long");
+  assert.equal(badSearch.pageError, undefined);
+
+  const outOfRangePage = parseCustomerListQuery({
+    q: "ram",
+    page: String(CUSTOMER_PAGE_MAX + 1),
+  });
+  assert.equal(outOfRangePage.q, "ram");
+  assert.equal(outOfRangePage.page, undefined);
+  assert.ok(outOfRangePage.pageError);
+
+  const empty = parseCustomerListQuery({});
+  assert.equal(empty.q, undefined);
+  assert.equal(empty.page, undefined);
+  assert.equal(empty.searchError, undefined);
+  assert.equal(empty.pageError, undefined);
+
+  const valid = parseCustomerListQuery({ q: "  ram  ", page: "2" });
+  assert.equal(valid.q, "ram");
+  assert.equal(valid.page, 2);
+  assert.equal(valid.searchError, undefined);
+  assert.equal(valid.pageError, undefined);
 });

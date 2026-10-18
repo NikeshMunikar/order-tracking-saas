@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 
-import type { CreateCustomerInput } from "../../src/lib/validation/customer.ts";
+import { CUSTOMER_PAGE_MAX, type CreateCustomerInput } from "../../src/lib/validation/customer.ts";
 import { prisma } from "../../src/lib/db/client.ts";
 import { lockBusinessOwnerRows } from "../../src/server/business/authorization.ts";
 import { BusinessAuthorizationError } from "../../src/server/business/errors.ts";
@@ -338,6 +338,32 @@ test("the customer list is paginated and reports a bounded page size", async () 
   const pageZero = await listCustomers(owner.id, business.id, { page: 0 });
   assert.equal(pageZero.page, 1);
   assert.equal(pageZero.customers.length, CUSTOMER_PAGE_SIZE);
+});
+
+test("an out-of-range page number cannot produce a raw Prisma error", async () => {
+  const owner = await createUser();
+  const business = await createBusinessWithOwner(owner.id, "Page Bounds");
+  await customerRow(business.id, { name: "Bounded" });
+
+  // Regression (M3 audit F2): accepting 1e21 as a page produced
+  // `skip = (1e21 - 1) * 20`, which overflowed the range Prisma/PostgreSQL
+  // accept and surfaced as an unhandled PrismaClientValidationError during a
+  // Server Component render. The service must clamp, not throw.
+  const huge = await listCustomers(owner.id, business.id, { page: 1e21 });
+  assert.equal(huge.page, 1);
+  assert.equal(huge.total, 1);
+  assert.equal(huge.customers.length, 1);
+
+  const beyondMax = await listCustomers(owner.id, business.id, {
+    page: CUSTOMER_PAGE_MAX + 1,
+  });
+  assert.equal(beyondMax.page, 1);
+
+  // The largest permitted page still reports the real total, with no rows.
+  const lastAllowed = await listCustomers(owner.id, business.id, { page: CUSTOMER_PAGE_MAX });
+  assert.equal(lastAllowed.page, CUSTOMER_PAGE_MAX);
+  assert.deepEqual(lastAllowed.customers, []);
+  assert.equal(lastAllowed.total, 1);
 });
 
 test("softDeleteCustomer blocks on the OWNER-row lock and re-reads authorization after a concurrent demotion", async () => {

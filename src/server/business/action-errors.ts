@@ -10,11 +10,17 @@ import {
 } from "@/server/business/errors";
 import { CustomerNotFoundError } from "@/server/customer/errors";
 import { ProductNotFoundError } from "@/server/product/errors";
+import {
+  DeliveryFieldError,
+  InvalidOrderTotalsError,
+  OrderNotFoundError,
+  ProductUnavailableError,
+} from "@/server/order/errors";
 
 /**
  * Translate an error thrown by the M2 business/membership/invitation
- * services, the M3 customer service or the M4 product service into a safe,
- * user-facing message.
+ * services, the M3 customer service, the M4 product service, or the M5
+ * order service into a safe, user-facing message.
  *
  * Only messages authored here are ever shown to the browser. Any error that
  * is NOT one of the known domain conditions — including Prisma/SQL errors
@@ -40,6 +46,30 @@ export function toSafeActionMessage(error: unknown): string {
     // Same message for "no such product", "soft-deleted" and "belongs to
     // another business" — the service deliberately collapses all three.
     return "That product could not be found.";
+  }
+
+  if (error instanceof OrderNotFoundError) {
+    // Same message for "no such order" and "belongs to another business" —
+    // the M5 order service deliberately collapses all such conditions.
+    return "That order could not be found.";
+  }
+
+  if (error instanceof ProductUnavailableError) {
+    // Reused by order create/edit for an inactive/soft-deleted/foreign
+    // product line, so the message stays equally indistinguishable.
+    return "That product is no longer available for new orders.";
+  }
+
+  if (error instanceof InvalidOrderTotalsError) {
+    // AMB-001 (as resolved 2026-10-18): the discount may never drive the
+    // total below zero; the input is rejected, not clamped.
+    return "The discount cannot exceed the order amount.";
+  }
+
+  if (error instanceof DeliveryFieldError) {
+    // §28 "required customer fields must exist" applied to the order's
+    // delivery recipient (cross-field service rule).
+    return error.message;
   }
 
   if (error instanceof BusinessAuthorizationError) {

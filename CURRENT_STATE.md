@@ -3,7 +3,7 @@
 Document Status: Active  
 Source Authority: `MASTER_SPEC.md` + approved decisions; this file records repository reality  
 Last Reviewed: 2026-10-18  
-Project Phase: MILESTONE 1 ACCEPTED; MILESTONE 2 STAGE 1 (schema) + STAGE 2 (domain/authorization) + STAGE 3 (business UI + Server Actions) IMPLEMENTED and VERIFIED — Stage 2 re-audited (PASS WITH MINOR FINDINGS at `ed3cf59`), findings remediated; awaiting the owner's acceptance decision; Milestone 3 not started  
+Project Phase: MILESTONE 1 ACCEPTED; MILESTONE 2 (Stages 1–3) ACCEPTED 2026-10-18 subject to a five-item security fix pack, which is IMPLEMENTED and VERIFIED; MILESTONE 3 (Customers) IMPLEMENTED and VERIFIED — awaiting the owner's M3 acceptance decision  
 Documentation State: Generated / Specified  
 
 ## 1. State rule
@@ -16,26 +16,30 @@ This file records what is true in the repository at the time of verification. It
 
 **M1 STATUS: ACCEPTED (2026-09-06).** Full verification has now passed in the person's local development environment: `prisma generate`, `prisma validate`, `tsc --noEmit`, `npm test` (8/8), `next build`, and `prisma migrate status` (migration `20260905103000_init` applied; "Database schema is up to date!") all PASS. This closes the verification gap recorded in the M1 checkpoint history below (§3 retains that history for reference; do not delete it).
 
-**M2 STATUS: STAGE 1 + STAGE 2 IMPLEMENTED AND VERIFIED; RE-AUDITED 2026-10-17 (PASS WITH MINOR FINDINGS) — NOT YET ACCEPTED (awaiting the owner's acceptance decision).** Milestone 2 Stage 1 (business / membership / invitation schema + migration) and Stage 2 (business authorization and membership + invitation domain services) are implemented and pass the verification recorded in §3A. An independent security/governance re-audit at commit `ed3cf59` returned PASS WITH MINOR FINDINGS — no security defect in the code. The minor findings (a test-power gap, stale documentation, informational lock-order hardening, dependency advisories, and Stage 3 notes) are remediated by commits `1ccabe1` (lock-serialization regression test), `b50a5f1` (deterministic `ORDER BY id` lock order), and the documentation update recording this. The milestone remains *not accepted*: acceptance is the owner's decision. Stage 3 — the M2 business UI and Server Actions (business onboarding, settings, team/membership management, invitations, and invite-by-link acceptance) — is **implemented and verified** (2026-10-18, see §3B) and is likewise **not accepted** and **not independently audited**. Milestone 3 has not started.
+**M3 STATUS: IMPLEMENTED AND VERIFIED (2026-10-18) — NOT YET ACCEPTED (awaiting the owner's acceptance decision).** Milestone 3 (Customers) adds the `Customer` model and a committed migration, tenant-scoped customer services (list with search + pagination, read, create, update, soft delete), Server Actions and UI under `/dashboard/[businessId]/customers`, and automated tests including the mandatory negative cases. Verification is recorded in §3D. Milestone 4 (Products) has not started.
+
+**M2 STATUS: ACCEPTED 2026-10-18 (Stages 1–3), subject to the fix pack below — FIX PACK IMPLEMENTED AND VERIFIED.** The milestone audit returned **PASS WITH FINDINGS (no Critical/High)** and the owner accepted M2 Stages 1–3 on 2026-10-18 subject to five remediation items (dot-segment `callbackUrl` guard, baseline security headers, credential-verification timing, fail-fast `AUTH_SECRET` validation, and a `toSafeActionMessage` unit test). All five are implemented and verified — see §3C. Stage 1 (business / membership / invitation schema + migration) and Stage 2 (business authorization and membership + invitation domain services) were implemented and passed the verification recorded in §3A; an independent re-audit at `ed3cf59` returned PASS WITH MINOR FINDINGS (no security defect in the code), remediated by `1ccabe1` (lock-serialization regression test), `b50a5f1` (deterministic `ORDER BY id` lock order), and a documentation update. Stage 3 — the M2 business UI and Server Actions — was implemented and verified on 2026-10-18 (§3B).
+
+**Provenance:** the M2 Stage 2 re-audit record (2026-10-17, `ed3cf59`, PASS WITH MINOR FINDINGS — no security defect found) and the Stage 3 verification record (2026-10-18, `0437275`) are retained in §3A and §3B. The M2 milestone audit subsequently returned **PASS WITH FINDINGS with no Critical/High severity finding**; the five remediation items are recorded in §3C and every accepted state in this file remains subject to the owner's decision.
 
 | Area | State | Evidence / latest verification |
 |---|---|---|
-| Repository | Initialized; M1 ACCEPTED; M2 Stages 1–2 implemented and verified (not accepted) | This package; M1 checkpoint `b6bc104`..`5687693`, M2 remediation `e7f9f31`..`ed3cf59`, post-re-audit cleanup `1ccabe1`..`b50a5f1` |
-| Application implementation | **Implemented (M1 + M2 Stage 3 scope)** — Next.js App Router + TypeScript + Tailwind scaffold, authentication UI, protected dashboard shell, business onboarding/settings/team UI | `src/app/**`, `src/components/**`, `src/server/business/actions.ts` |
-| Database schema | **Implemented, verified** — `User` (`id`, `email` unique, `passwordHash`, `name?`, `sessionVersion`, timestamps); `Business`; `BusinessMember`; `BusinessInvitation`; and enum `BusinessMemberRole { OWNER, STAFF }`. No `Session`/`Account`/`VerificationToken` (DEC-001 uses JWT sessions). Prisma 7 config compatibility fix applied (`prisma.config.ts` + `@prisma/adapter-pg`); two committed migrations | `prisma/schema.prisma`, `prisma/migrations/20260905103000_init/`, `prisma/migrations/20260907120000_add_business_membership/` (including the hand-written partial unique index `business_invitations_active_email_key`), `prisma.config.ts`, `src/lib/db/client.ts`; verification in §3 and §3A |
+| Repository | Initialized; M1 ACCEPTED; M2 (Stages 1–3) ACCEPTED 2026-10-18 subject to a fix pack (now applied); M3 (Customers) implemented and verified (not accepted) | This package; M1 checkpoint `b6bc104`..`5687693`, M2 remediation `e7f9f31`..`ed3cf59`, post-re-audit cleanup `1ccabe1`..`b50a5f1`, Next.js security upgrade `e587611`, M2 Stage 3 `0437275`/`c3a76fe`, M2 fix pack `6b6ad6a`..`15f9366`, M3 `5177ae3`/`d175bdb`/`4b58e37` |
+| Application implementation | **Implemented (M1 + M2 + M3 scope)** — Next.js App Router + TypeScript + Tailwind scaffold, authentication UI, protected dashboard shell, business onboarding/settings/team UI, customer list/detail/create/edit UI | `src/app/**`, `src/components/**`, `src/server/**` |
+| Database schema | **Implemented, verified** — `User` (`id`, `email` unique, `passwordHash`, `name?`, `sessionVersion`, timestamps); `Business`; `BusinessMember`; `BusinessInvitation`; `Customer`; and enum `BusinessMemberRole { OWNER, STAFF }`. No `Session`/`Account`/`VerificationToken` (DEC-001 uses JWT sessions). Prisma 7 config compatibility fix applied (`prisma.config.ts` + `@prisma/adapter-pg`); three committed migrations (the M3 one is CLI-generated) | `prisma/schema.prisma`, `prisma/migrations/20260905103000_init/`, `prisma/migrations/20260907120000_add_business_membership/` (including the hand-written partial unique index `business_invitations_active_email_key`), `prisma/migrations/20261018055702_add_customer/`, `prisma.config.ts`, `src/lib/db/client.ts`; verification in §3, §3A and §3D |
 | Authentication | **Implemented, verified** — Auth.js v5, Credentials provider, JWT sessions, `sessionVersion` global invalidation, Argon2id hashing (`@node-rs/argon2`), registration/login/logout, server-side protected-route enforcement via `requireSession()` | `src/server/auth/**`, `src/lib/security/**`, `src/lib/validation/auth.ts`, `src/types/next-auth.d.ts`; decision recorded in `docs/architecture-decisions.md` DEC-001; `tsc --noEmit` and `next build` both PASS (§3) |
-| Business management | **Implemented (M2 Stages 1–3), verified** — `Business` / `BusinessMember` / `BusinessInvitation` schema and migration; server-side services for business creation, settings update, member listing / role change / removal, and OWNER-only invitations; server-side authorization in every mutation; these services are wrapped by Server Actions with a UI in Stage 3 (§3B) | `prisma/schema.prisma`, `prisma/migrations/20260907120000_add_business_membership/`, `src/server/business/**`, `src/lib/validation/business.ts`; verification in §3A and §3B |
+| Business management | **Implemented (M2 Stages 1–3), verified, ACCEPTED 2026-10-18 (fix pack applied)** — `Business` / `BusinessMember` / `BusinessInvitation` schema and migration; server-side services for business creation, settings update, member listing / role change / removal, and OWNER-only invitations; server-side authorization in every mutation; these services are wrapped by Server Actions with a UI in Stage 3 (§3B) | `prisma/schema.prisma`, `prisma/migrations/20260907120000_add_business_membership/`, `src/server/business/**`, `src/lib/validation/business.ts`; verification in §3A, §3B and §3C |
 | Business invitations | **Implemented (M2 Stage 2), verified** — invite-by-link model (DEC-011): 256-bit token, SHA-256 hash at rest (DEC-012), 7-day expiry, OWNER-only invite/revoke, single active invitation per (business, email) enforced by a partial unique index, acceptance by authenticated email match with a conditional claim | `src/server/business/invitation-service.ts`, `src/lib/security/token.ts`; ADRs DEC-011 / DEC-012 in `docs/architecture-decisions.md`; verification in §3A |
-| Customer management | Not Started | No implementation |
+| Customer management | **Implemented (M3), verified** — tenant-owned customers with soft deletion: server-side list (name/phone search, pagination, selective projection), detail read, create, update, and OWNER-only soft delete, all behind `requireMembership`/`requireOwner`; Server Actions + UI under `/dashboard/[businessId]/customers`; local migrations applied through the CLI | `prisma/schema.prisma` (`Customer`), `prisma/migrations/20261018055702_add_customer/`, `src/server/customer/**`, `src/lib/validation/customer.ts`, `src/app/(dashboard)/dashboard/[businessId]/customers/**`, `src/components/customer/**`; verification in §3D |
 | Product management | Not Started | No implementation |
 | Order management | Not Started | No implementation |
 | Status workflow | Not Started | No implementation |
 | Public tracking | Not Started | No implementation |
 | Business UI / dashboard | **Implemented (M2 Stage 3), verified** — business onboarding (create business), business settings form, team page (members + invitations), invite acceptance page, `callbackUrl`-aware sign-in; server-side authorization on every route; dashboard business list | `src/app/(dashboard)/**`, `src/app/invite/**`, `src/components/business/**`, `src/components/auth/**`, `src/server/business/actions.ts`, `src/lib/security/redirect.ts`, `src/lib/time.ts`; verification in §3B |
-| Automated tests | **Implemented, passing** — Node's built-in `node:test` (zero new dependency; **DEC-004 remains OPEN and is NOT resolved by this**). Unit: **31/31** (`npm test`; 22 pre-existing + 9 new `safeCallbackUrl` open-redirect tests). DB-backed integration: **28/28** (`npm run test:integration`) covering OWNER/STAFF authorization for all five OWNER-only mutations, tenant isolation, the closed business-role invariant, OWNER-row locking / re-verification (including deterministic lock serialization for `updateMemberRole`/`removeMember`), and invitation acceptance / P2002 paths. The M2 Stage 3 Server Action layer has **no automated test** — its authorization delegates to this tested service layer and was exercised manually (§3B) | `tests/unit/**`, `tests/integration/**`, `tests/helpers/**`, `tests/README.md`; results in §3A and §3B |
+| Automated tests | **Implemented, passing** — Node's built-in `node:test` (zero new dependency; **DEC-004 remains OPEN and is NOT resolved by this**). Unit: **51/51** (`npm test`, run through `tests/helpers/register-unit.mjs`, which registers the `@/*` alias loader and an inert `server-only` stub without requiring a database) — auth/password/session/redirect/token/slug/action-error/customer-validation suites. DB-backed integration: **37/37** (`npm run test:integration`) covering OWNER/STAFF authorization for all five M2 OWNER-only mutations, tenant isolation, the closed business-role invariant, OWNER-row locking / re-verification (including deterministic lock serialization), invitation acceptance / P2002 paths, and M3 customer authorization, cross-tenant denial, soft-delete preservation, search, pagination, and the OWNER-row-re-verification path for customer deletion. The M2 Stage 3 Server Action layer has **no automated test** — its authorization delegates to this tested service layer and was exercised manually (§3B); the M3 Server Actions delegate the same way | `tests/unit/**`, `tests/integration/**`, `tests/helpers/**`, `tests/README.md`; results in §3A, §3B and §3D |
 | Infrastructure | Not Configured | No production provider/configuration exists |
 | Production deployment | Not Deployed | No deployment evidence |
-| Documentation | Specified, kept current through M2 Stage 3 | This file, `docs/architecture-decisions.md`, `ai-context/07-current-milestone.md` |
+| Documentation | Specified, kept current through M3 (Customers) | This file, `docs/architecture-decisions.md`, `ai-context/07-current-milestone.md` |
 
 ## 3. Verification baseline
 
@@ -124,6 +128,50 @@ Last verified commit for this evidence: `b50a5f1` (post-re-audit cleanup; the ea
 
 **Honest scope of this evidence:** these checks establish type checking, linting, build, unit/integration tests against a real PostgreSQL, and manual end-to-end behaviour. They do **not** constitute an independent security audit or milestone acceptance, and they do not decide DEC-004. The Server Action layer itself has no automated test (its authorization delegates to the already-tested service layer and was exercised manually). Manual smoke-test data was created in the development database `order_tracking_dev` (business "Smoke Bakery Co" and two `smoke*@example.com` users) and was not removed. The Next.js upgrade was adopted as a security fix at the owner's explicit instruction, which is why a previously "separately-approved change" dependency update appears here.
 
+## 3C. M2 acceptance fix pack verification (2026-10-18)
+
+M2 (Stages 1–3) was accepted by the owner on 2026-10-18 subject to five remediation items from the milestone audit (PASS WITH FINDINGS; no Critical/High severity finding). All five are implemented and verified:
+
+| Item | Change | Commit |
+|---|---|---|
+| Dot-segment `callbackUrl` payloads | `safeCallbackUrl` (`src/lib/security/redirect.ts`) now additionally requires the normalized path to be a single leading `/` (not `//` and not `/\`), closing a protocol-relative open-redirect path that the origin check alone did not catch (`/.//evil.com`, `/a/..//evil.com`, and similar). Percent-encoded variants are intentionally left un-decoded | `15f9366` |
+| Security headers | `next.config.ts` sets `poweredByHeader: false` plus `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`, and `Referrer-Policy: no-referrer` on `/login` and `/invite/:path*` | `4df7439` |
+| Credential-verification timing | `authorize()` now verifies against a fixed Argon2id dummy hash when the email is unknown, so the unknown-email and wrong-password paths cost the same. Comments in `config.ts`/`login.ts` and DEC-001's consequences were corrected: sign-in timing no longer discloses existence, but registration still reports that an email is registered (no email verification, per DEC-001) | `bf78d33` |
+| `AUTH_SECRET` validation | `src/instrumentation.ts` calls `assertAuthSecret()` at server start and fails fast when `AUTH_SECRET` is missing or shorter than 32 characters; `.env.example`, `README.md` and `docs/deployment.md` document `AUTH_SECRET` and `AUTH_TRUST_HOST` | `f694582` |
+| `toSafeActionMessage` unit test | Pins each known domain-error mapping and the single generic fallback (Prisma-P2002-shaped, deadlock/code-40P01-shaped and unknown errors leak no internal text). Unit tests now run through an alias loader so server modules can be imported | `6b6ad6a` |
+
+Verification evidence for these commits (2026-10-18, local): `npx tsc --noEmit` exit 0; `npm test` **41/41**; `npm run lint` exit 0; `npm run build` exit 0 (Next.js 16.4.2, Turbopack); `curl -I` against `next start` confirmed the headers above on `/`, `Referrer-Policy: no-referrer` on `/login` and `/invite/*`, and the absence of `X-Powered-By`.
+
+## 3D. M3 (Customers) verification (2026-10-18)
+
+**MILESTONE 3 IMPLEMENTATION — local development environment:**
+
+| Check | Command | Result |
+|---|---|---|
+| Prisma client generation | `npx prisma generate` | **PASS** (v7.10.0) |
+| Schema validation | `npx prisma validate` | **PASS** — "The schema at prisma\schema.prisma is valid" |
+| Migration state (development DB) | `npx prisma migrate status` | **PASS** — "3 migrations found ... Database schema is up to date!" |
+| Migrations applied to the dedicated test DB | `npm run test:db:setup` | **PASS** — applied `20261018055702_add_customer`; "All migrations have been successfully applied." |
+| Type checking | `npx tsc --noEmit` | **PASS** — exit 0 |
+| Unit tests | `npm test` | **PASS — 51/51** (was 41; +10 customer-validation tests) |
+| Integration tests | `npm run test:integration` | **PASS — 37/37** (was 28; +9 customer-service tests) |
+| Linting | `npm run lint` | **PASS** — exit 0 (no errors or warnings) |
+| Production build | `npm run build` (Next.js 16.4.2, Turbopack) | **PASS** — exit 0; routes now also include `/dashboard/[businessId]/customers`, `/dashboard/[businessId]/customers/[customerId]`, `/dashboard/[businessId]/customers/new` |
+
+**Last verified commit for this evidence: `4b58e37`** (the M3 test commit; the implementation commits are `5177ae3`, `d175bdb`, and this documentation update is a subsequent commit).
+
+**What the integration suite actually asserts (M3):** an OWNER can create/read/list/update/soft-delete; STAFF can view/create/update but deletion throws `BusinessAuthorizationError` and leaves the row untouched; a browser-supplied `businessId` cannot switch tenant context (all five entry points throw `BusinessNotFoundError` for a non-member and the other tenant's row is unmodified); a customer id from another tenant cannot be used with this businessId (`getCustomer` → null, update/delete → `CustomerNotFoundError`, and an own id through the other business → `BusinessNotFoundError`); a removed member is denied and the row is unchanged; a soft-deleted customer disappears from list/view/search while the row is preserved with `deletedAt` set, and re-updating it throws `CustomerNotFoundError`; search matches name case-insensitively and phone substrings, scoped to the tenant; pagination returns 20 per page with correct totals and no overlap; and a deterministic OWNER-row-lock test shows `softDeleteCustomer` does not settle while the lock is held and is rejected after the acting OWNER is concurrently demoted.
+
+**Honest scope of this evidence:** these checks establish type checking, linting, building, migration application and the automated suites against a real PostgreSQL. They do **not** constitute an independent security audit or milestone acceptance, and they do not decide DEC-004. The M3 Server Actions and UI have **no direct automated test** (their authorization delegates to the tested service layer), and **no manual browser end-to-end pass of the customer UI was performed in this milestone** — unlike M2 Stage 3.
+
+**Interpretations recorded (derived from the source, not invented silently):**
+
+- **Customer deletion is OWNER-only.** MASTER_SPEC §4 grants STAFF "view/create/update customers" and does not list deletion, so deletion requires OWNER. The `STAFF` capability list was treated as exhaustive for that role.
+- **Search matches name (case-insensitive contains) or phone (contains).** MASTER_SPEC §19 shows a single search box without naming fields; `docs/database.md` §4 lists `Customer.businessId` and `Customer.phone` as the customer access paths. A contains search cannot use a b-tree index, so it is deliberately unindexed at MVP scale.
+- **The `Orders` count, `Last Order` column and customer order history are not implemented.** MASTER_SPEC §19 and `docs/ui-ux.md` §8 describe them, but they require the `Order` model (Milestone 5). They are omitted rather than rendered as zeros. **Open item for M5.**
+- **No uniqueness constraint on customer name or phone.** The approved `Customer` field list defines none and the source does not require deduplication; duplicates are permitted.
+- **No customer hard-deletion path exists.** Deletion is soft (`deletedAt`) per `docs/database.md` DB-003 and MASTER_SPEC §7, and the UI copy avoids implying irreversible erasure (`docs/ui-ux.md` §225).
+
 ## 4. Approved baseline, not implemented
 
 The approved architectural baseline is a modular monolith using Next.js App Router, React, TypeScript, Tailwind CSS, PostgreSQL, Prisma, Zod, Server Components, Server Actions, and Route Handlers only where an actual HTTP endpoint is needed. The tenancy model is pooled PostgreSQL with server-side authorization and tenant-scoped data access; PostgreSQL RLS is not required for MVP. This is design state, not implementation evidence.
@@ -207,6 +255,18 @@ The supplied pre-existing `CURRENT_STATE.md` contained both `Current Milestone: 
 | RISK-006 | Medium | Documentation drift | Update current state after meaningful changes and require verification evidence |
 | RISK-007 | Critical | Platform/business authorization conflation | Separate authorization domains, server-side role checks, escalation tests, and tenant-scope verification |
 
+### 10A. Known pre-production items (accepted, not built)
+
+These are explicitly **not implemented**. They are recorded here so no later reader mistakes their absence for an oversight, and they must be addressed before a production release that is claimed to be secure:
+
+| Item | Why it is not done now |
+|---|---|
+| Rate limiting / account lockout for sign-in | Belongs with deployment hardening; requires a store appropriate to the chosen hosting (DEC-002 OPEN) |
+| Rate limiting for invitation acceptance | Same; the token is 256-bit and email-bound, so guessing is infeasible, but abuse controls are still a release gate |
+| Full `script-src` Content-Security-Policy | Requires nonce/hash plumbing for Next.js inline bootstrap scripts; the currently shipped policy is `frame-ancestors 'none'` only |
+| HSTS | Must be set by the TLS-terminating host/proxy, not by the application (a header sent from a non-HTTPS environment would be wrong) |
+| Email verification | Not part of DEC-001 as accepted; registration therefore reveals whether an email is already registered |
+
 ## 11. M1 checkpoint — implementation commits
 
 The following six commits implement the ACCEPTED M1 scope (scaffold, database schema, authentication, UI, tests, Prisma 7 compatibility fix). See §3 for the acceptance verification evidence.
@@ -224,14 +284,16 @@ These sit on top of the governance commits `4ef6c4e` (DEC-001 accepted), `163d45
 
 ## 12. Immediate next step
 
-M1 is ACCEPTED (§2, §3). Milestone 2 Stages 1–3 are **implemented and verified and NOT yet accepted** (§2, §3A, §3B) — acceptance is the owner's decision.
+M1 is ACCEPTED (§2, §3). Milestone 2 (Stages 1–3) is **ACCEPTED (2026-10-18)** subject to the fix pack, which is implemented and verified (§3C). Milestone 3 (Customers) is **implemented and verified and NOT yet accepted** (§2, §3D) — acceptance is the owner's decision.
 
-1. **Await the owner's M2 acceptance decision** (Stages 1–3). Stage 2 was independently re-audited (2026-10-17, at `ed3cf59`) with PASS WITH MINOR FINDINGS, remediated by `1ccabe1` (lock-serialization regression test), `b50a5f1` (deterministic `ORDER BY id` lock order), and the documentation update. Stage 3 (business UI + Server Actions) was verified on 2026-10-18 (§3B) and has **not** been independently audited. This file does not mark anything accepted.
-2. **Do not begin Milestone 3** until M2 is accepted.
-3. Deferred, out of M2 scope and not implemented: business deletion; per-session revocation (global `sessionVersion` invalidation remains the accepted mechanism, per DEC-001).
-4. Resolve AMB-001 before final authoritative financial-calculation implementation (Milestone 5).
-5. Resolve AMB-002 before the status workflow milestone is marked complete (Milestone 6).
-6. DEC-002, DEC-003, DEC-004, DEC-005 remain OPEN (production hosting / database / monitoring, and the test framework — the M2 tests use `node:test` without deciding it); DEC-006 / DEC-007 remain OPEN (the `Order` table). None block awaiting the M2 re-audit.
+1. **Await the owner's M3 audit / acceptance decision.** This file does not mark Milestone 3 accepted.
+2. **Do not begin Milestone 4 (Products)** until M3 is accepted.
+3. **Not done for M3:** no manual browser end-to-end pass of the customer UI was performed; the automated suites, the migration check and the production build are the evidence for this milestone. No customer hard-deletion path and no customer deduplication exist (both deliberate — see §3D).
+4. **Not built, recorded as pre-production items (§10A):** rate limiting / lockout for sign-in and invitation acceptance, a full `script-src` Content-Security-Policy, HSTS at the host/proxy, and email verification.
+5. **Milestone 5 must add:** the customer `Orders` count, `Last Order` column and customer order-history view that M3 deliberately omitted because they need the `Order` model.
+6. Resolve AMB-001 before authoritative financial-calculation implementation (Milestone 5) and AMB-002 before the status workflow milestone is marked complete (Milestone 6).
+7. Deferred, out of M2 scope and not implemented: business deletion; per-session revocation (global `sessionVersion` invalidation remains the accepted mechanism, per DEC-001).
+8. DEC-002, DEC-003, DEC-004, DEC-005, DEC-006 and DEC-007 remain OPEN — including the test framework (the tests use `node:test` without deciding DEC-004). None block awaiting the M3 audit.
 
 ## 13. Reality rule for AI agents
 

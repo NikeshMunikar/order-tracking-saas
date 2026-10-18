@@ -79,6 +79,11 @@ export type OrderItemDetail = {
 export type OrderDetail = {
   id: string;
   orderNumber: string;
+  /// M7: the bearer token of the order's public tracking link. It is returned
+  /// to an authenticated member of the owning business so the detail page can
+  /// offer copy/share (MASTER_SPEC §18/§21); it is never exposed publicly
+  /// except through the token-addressed /track/[token] page, nor logged.
+  publicTrackingToken: string;
   status: string;
   paymentStatus: string;
   subtotal: string;
@@ -443,6 +448,7 @@ export async function getOrder(
     select: {
       id: true,
       orderNumber: true,
+      publicTrackingToken: true,
       status: true,
       paymentStatus: true,
       subtotal: true,

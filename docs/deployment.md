@@ -52,7 +52,20 @@ Before MVP production release, the environment must provide:
 
 ## 4. Configuration and secrets
 
-Use environment-based secrets. Never commit real credentials. An `.env.example` file will document required variable names once implementation configuration exists, without containing live values.
+Use environment-based secrets. Never commit real credentials. `.env.example` documents the required variable names without containing live values.
+
+Required application variables (implementation state as of M2):
+
+- `DATABASE_URL` — the PostgreSQL connection string used by Prisma.
+- `AUTH_SECRET` — the Auth.js signing secret. Required in every environment, at least 32 characters of high-entropy value. The application validates it at startup (`src/lib/env/auth-env.ts`, invoked from `src/instrumentation.ts`) and fails fast with a clear message if it is missing or too short. Generate with `npx auth secret`.
+- `AUTH_TRUST_HOST` — required in production. Auth.js only auto-trusts the request host while running `next dev`; without this, a production build served by `next start` (or a managed host) fails sign-in with `UntrustedHost` (HTTP 500 on `/api/auth/*`). Set `AUTH_TRUST_HOST=true` in the production environment.
+
+Known pre-production security items that are deliberately **not** implemented yet (do not claim otherwise):
+
+- Application-level rate limiting / lockout for sign-in attempts and for invitation acceptance.
+- A full `script-src` Content-Security-Policy. Baseline security headers are set in `next.config.ts`; a script-src policy needs nonce/hash plumbing for Next.js inline scripts, while `frame-ancestors 'none'` is enforced now.
+- `Strict-Transport-Security` (HSTS), which must be set at the host/proxy that terminates TLS for the production domain rather than from the application (see §11).
+- Email verification.
 
 The selected authentication provider, hosting provider, database provider, and monitoring provider must have documented environment-specific configuration after their decisions are accepted.
 
@@ -136,6 +149,8 @@ Deployment verification must include review that stack traces, SQL/provider erro
 Before production release, verify:
 
 - HTTPS.
+- HSTS set at the host/proxy that terminates TLS for the production domain.
+- Baseline security headers present on the deployed build (`next.config.ts`), and `X-Powered-By` absent.
 - Secure session/cookie settings appropriate to the selected auth architecture.
 - Environment secrets are not committed.
 - Tenant isolation tests pass.

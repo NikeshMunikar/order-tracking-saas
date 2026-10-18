@@ -1,14 +1,16 @@
 # Order Tracking SaaS
 
-A low-cost, multi-tenant order-tracking SaaS MVP foundation for small businesses. The repository is intentionally documentation-first and is currently **pre-implementation**.
+A low-cost, multi-tenant order-tracking SaaS MVP foundation for small businesses. Implementation proceeds milestone by milestone; [`CURRENT_STATE.md`](CURRENT_STATE.md) is the authoritative record of what is actually implemented and verified.
 
 ## Repository status
 
-**Application implementation:** Not Started  
-**Database implementation:** Not Started  
-**Authentication:** Provider decision OPEN  
-**Production deployment:** Not Deployed  
+**Application implementation:** Milestones 1–2 implemented and verified (M2 accepted 2026-10-18)  
+**Database implementation:** M1–M2 migrations applied (authentication, business onboarding, membership)  
+**Authentication:** Auth.js Credentials + JWT sessions (DEC-001 accepted)  
+**Production deployment:** Not deployed (DEC-002/DEC-003 open)  
 **Documentation:** Generated and audited  
+
+See [`CURRENT_STATE.md`](CURRENT_STATE.md) for per-milestone verification evidence and the exact next task.
 
 Do not interpret architecture documentation as evidence that software has been implemented.
 
@@ -65,6 +67,18 @@ When implementation differs from an approved requirement, record the deviation, 
 ## Verification
 
 Implementation status changes only from repository evidence. Verification status changes only after an appropriate verification procedure. Deployment alone is not verification. Before claiming a milestone as verified, record the repository revision, environment, verifier, and evidence as appropriate in `CURRENT_STATE.md`.
+
+## Environment configuration
+
+Copy `.env.example` to `.env` and fill in real values. Never commit `.env` or any real secret.
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | PostgreSQL connection string used by Prisma. |
+| `AUTH_SECRET` | Yes | Auth.js signing secret, at least 32 characters of high-entropy value. Generate with `npx auth secret`. The app fails fast at startup if it is missing or too short (`src/lib/env/auth-env.ts`, invoked from `src/instrumentation.ts`). |
+| `AUTH_TRUST_HOST` | Production only | `next dev` trusts localhost automatically; a production build served by `next start` (or a managed host) requires the request host to be trusted explicitly, otherwise sign-in fails with `UntrustedHost` (HTTP 500 on `/api/auth/*`). Set `AUTH_TRUST_HOST=true` in the production environment. |
+
+See [`docs/deployment.md`](docs/deployment.md) §4 for the production configuration requirements.
 
 ## Local development
 

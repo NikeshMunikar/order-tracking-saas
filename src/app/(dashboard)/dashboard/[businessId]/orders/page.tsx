@@ -243,7 +243,8 @@ export default async function OrdersPage({
       {result.total > 0 && result.orders.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-neutral-500">
           <p>
-            Page {result.page} of {result.totalPages} · {result.total} orders
+            Page {result.page} of {result.totalPages} · {result.total}{" "}
+            {result.total === 1 ? "order" : "orders"}
           </p>
           <div className="flex gap-4">
             {result.page > 1 && (

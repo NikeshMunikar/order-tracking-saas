@@ -39,45 +39,49 @@ The approved MVP is the smallest product that completes the core workflow reliab
 
 ## 2. Milestones
 
-### Milestone 1 — Project setup
+Status annotations record execution reality: M1–M8 are **accepted by the owner** (see `CURRENT_STATE.md` §3 and the acceptance commits); M9 is implemented with the full verification battery and awaits acceptance (2026-10-19); M10 is pending. The roadmap is a planning artifact — milestone scope may expand only through owner-approved decisions (e.g. DEC-014 expanded M8, DEC-015 defined M9).
+
+> Last Reviewed: 2026-10-19 (header review updated with the M9 milestone; descriptions unchanged since 2026-09-05).
+
+### Milestone 1 — Project setup — ACCEPTED
 
 Next.js App Router, TypeScript, Tailwind, PostgreSQL, Prisma, authentication decision/implementation, and basic layout.
 
-### Milestone 2 — Business onboarding
+### Milestone 2 — Business onboarding — ACCEPTED
 
 Business creation, settings, and membership.
 
-### Milestone 3 — Customers
+### Milestone 3 — Customers — ACCEPTED
 
 Customer CRUD, search, and customer details.
 
-### Milestone 4 — Products
+### Milestone 4 — Products — ACCEPTED
 
 Product CRUD and active/inactive state.
 
-### Milestone 5 — Orders
+### Milestone 5 — Orders — ACCEPTED
 
 Create/view/edit orders, calculate totals, manual payment status, delivery information.
 
-### Milestone 6 — Order workflow
+### Milestone 6 — Order workflow — ACCEPTED
 
 Status changes and status history.
 
-### Milestone 7 — Customer tracking
+### Milestone 7 — Customer tracking — ACCEPTED
 
 Secure tracking token, public page, timeline, copy/share.
 
-### Milestone 8 — Dashboard
+### Milestone 8 — Dashboard — ACCEPTED
 
 Order counts, recent orders, search/filter.
 
-### Milestone 9 — Security/testing
+### Milestone 9 — Security/testing — IMPLEMENTED, NOT YET ACCEPTED (2026-10-19)
 
-Tenant isolation, validation, safe error handling, E2E testing, and mobile testing.
+Tenant isolation, validation, safe error handling, E2E testing, and mobile testing. Executed per DEC-015: interim abuse-protection rate limiting (DEC-015 O-A over `/track/[token]`, sign-in and invitation acceptance, production-grade shared enforcement deferred to M10), Playwright E2E critical path (`docs/testing.md` §8), tenant-isolation/authorization matrix coverage (§5A), safe app-router error boundaries, and the responsive/browser + keyboard verification pass (§9).
 
-### Milestone 10 — Deployment
+### Milestone 10 — Deployment — PENDING
 
-Production database, environment, domain/HTTPS, backups, monitoring.
+Production database, environment, domain/HTTPS, backups, monitoring. Includes the M10 dependencies recorded by M9: production-grade abuse protection for the selected hosting architecture (DEC-002) and the AUTH_SECRET startup fail-fast owner decision (F4).
 
 After every milestone: run tests, type checking, linting, production build verification, migration checks, and manual core-workflow verification.
 

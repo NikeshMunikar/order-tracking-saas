@@ -148,9 +148,15 @@ Register
 
 This is the highest-value complete workflow in the MVP.
 
+**Implemented in M9 (`e4a184a`).** Playwright drives the exact chain above through the real UI (`tests/e2e/critical-path.spec.ts`): registration with a fresh account, signing in, creating the business, product, customer and order, extracting the tracking link from the order's "Customer tracking link" card, opening `/track/[token]` and verifying the customer-facing order (items, amounts, default status), then confirming the order and re-checking the tracking page renders the updated status ("Order confirmed"). A second spec (`tests/e2e/rate-limit.spec.ts`) proves the DEC-015 abuse-protection boundary: 60 requests from one identity keep rendering the generic invalid-link state and the next one renders the generic throttled state.
+
+Run with `npm run test:e2e` (first sets up the dedicated E2E database, then `playwright test`). The suite runs against the dedicated `_e2e` database only (derived from `DATABASE_URL` by replacing the trailing `_dev` suffix — see `tests/helpers/e2e-database-url.mjs` and `tests/helpers/setup-e2e-db.mjs`), never against the development database, the `_test` verification database or production. The dev server for the suite is started on port 3113 with the E2E database URL only. The E2E database accumulates disposable run data; it is never reset automatically and never used by any other suite.
+
 ## 9. UI/responsive testing
 
 Verify critical screens at common desktop, tablet, and mobile widths. At minimum validate tracking, order creation, status update, dashboard, and form behavior. Include keyboard/accessibility checks for the critical workflow.
+
+**Performed in M9** (manual Playwright-driven browser pass at 375×812, 768×1024 and 1440×900 against the development server). The pass covered tracking, the M8 dashboard, the orders list, order creation, order detail with the status form, sign-in and registration. It found and fixed two real mobile-layout defects (`21bbb83`) — the business-sections navigation and the order-form item row overflowed the viewport at 375 px — and otherwise verified that all critical screens fit without horizontal page overflow at all three widths (wide tables scroll in place inside contained `overflow-x-auto` wrappers). The keyboard pass verified tab order and keyboard operation of the critical workflow: registration field order, the order-status form (Tab to the radio, Space to select, Enter to submit with the "Status updated to Confirmed." feedback), and the sign-in flow. Findings are recorded in `CURRENT_STATE.md` §3K.
 
 ## 10. Migration verification
 

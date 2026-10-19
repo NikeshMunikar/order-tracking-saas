@@ -108,7 +108,7 @@ function ItemRows({
         <p className="text-xs text-neutral-500">No products match &ldquo;{search}&rdquo;.</p>
       )}
       {rows.map((row, index) => (
-        <div key={row.key} className="flex items-end gap-2">
+        <div key={row.key} className="flex flex-wrap items-end gap-2">
           <div className="flex grow flex-col gap-1.5">
             <label
               className="text-xs text-neutral-500"

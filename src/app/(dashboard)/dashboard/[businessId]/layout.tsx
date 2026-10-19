@@ -61,7 +61,7 @@ export default async function BusinessLayout({
 
       <nav
         aria-label="Business sections"
-        className="flex gap-6 border-b border-neutral-200 text-sm font-medium"
+        className="flex gap-6 overflow-x-auto border-b border-neutral-200 text-sm font-medium"
       >
         <Link
           href={`/dashboard/${businessId}`}

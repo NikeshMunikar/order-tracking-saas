@@ -26,6 +26,7 @@ This register records significant decisions without turning open questions into 
 | DEC-011 | Invite-by-link invitation model | ACCEPTED | Business membership/invitations |
 | DEC-012 | Invitation token hashing strategy | ACCEPTED | Security/token storage |
 | DEC-013 | Order status transition and cancellation matrix (resolves AMB-002) | ACCEPTED (2026-10-18) | Orders/workflow |
+| DEC-014 | Dashboard "today" timezone, count semantics, and Milestone 8 search/filter scope | ACCEPTED (2026-10-18) | Dashboard/search/authorization |
 
 > Numbering note: `DEC-010` is intentionally skipped here. `DEC-001` already
 > refers forward to a future, not-yet-registered `DEC-010` for the
@@ -372,4 +373,42 @@ No generic permission engine, global mixed role enum, or role hierarchy is intro
 **Migration implications:** one enum-value migration (`ALTER TYPE "OrderStatus" ADD VALUE 'CANCELLED'`); no table or column changes are required — `OrderStatusHistory` already stores `oldStatus`/`newStatus`/`changedBy`/`note`/`createdAt`.
 
 **Reconsideration conditions:** new product requirements for reopening/correcting orders, partial cancellation or refunds, per-role workflow refinement, or customer-initiated cancellation.
+
+## DEC-014 — Dashboard "today" timezone, count semantics, and Milestone 8 search/filter scope
+
+**Status:** ACCEPTED (2026-10-18)  
+**Date:** 2026-10-18  
+**Accepted:** 2026-10-18  
+**Scope:** Milestone 8 — business dashboard (order counts + recent orders), order search/filter/pagination, product search, and the order-creation customer/product pickers
+
+**Source status (spec vs. implementation):** `MASTER_SPEC.md` §17 requires the dashboard to show **Today's Orders**, **Pending**, **In Progress**, **Delivered** and **recent orders**, "Keep analytics intentionally basic" and "Do not build advanced reporting". §18 (`[Search customer]` when creating an order), §19 (customer search — delivered), §20 (product Features include **Search**), §34 (mobile-usable dashboard), §35 (testing) and §44/Milestone 8 ("Dashboard: Order counts / Recent orders / Search/filter") define the surrounding expectations. The source does not fix (a) which timezone "today" means, (b) which statuses map to "In Progress", or (c) whether the deferred product/picker searches belong to M8. Those were recorded as blocking decisions D1–D4 and are now decided explicitly by the owner rather than chosen silently.
+
+**Decision (owner, 2026-10-18):**
+
+1. **D1 — Business-local day ("Today's Orders").** Compute the local calendar-day window from the business's stored `Business.timezone` (IANA) and query with a **start-inclusive, end-exclusive** UTC timestamp range. If the stored timezone is missing or not a valid IANA zone, **fall back to UTC safely** rather than throwing. No hardcoded Nepal-specific (or any other region) assumptions.
+2. **D2 — Count semantics.** Count orders **created during the business-local calendar day**, grouped by their current status: **Pending** = `PENDING`; **In Progress** = `CONFIRMED` + `PREPARING` + `READY` + `OUT_FOR_DELIVERY`; **Delivered** = `DELIVERED`; `CANCELLED` is excluded from all three counts. (If the approved specification had defined a conflicting interpretation, it was to be flagged before implementation — it was not; this matches §17.)
+3. **D3 — Expanded M8 scope.** Include (a) the per-business dashboard with today's counts and a limited recent-orders list; (b) order-list search by order number and customer name, status filtering, and pagination; (c) product-list search; and (d) searchable customer and product pickers in the order-creation form. The simplest maintainable solution on the existing stack, with no new dependencies and no overengineered picker UI. Server-side validation, membership authorization, tenant isolation, literal search escaping, and the existing soft-delete/active-product rules are preserved; picker results and pagination stay scoped to the authorized business.
+4. **D4 — Order filters and page size.** Order search covers order number and customer name plus a status filter only; no date-range or payment-status filter in M8. Reuse the M3 customer-list page-size and pagination conventions.
+
+**Implementation:** "today" is computed by a small pure helper (`src/lib/business-day.ts`) that validates the zone with `Intl` (safe UTC fallback) and returns the local-day `[start, end)` window as UTC instants. Order search/filter/pagination extends `listOrders` behind `requireMembership`, escaping `LIKE` metacharacters via `escapeLikePattern` and matching `orderNumber` or `customer.name`. Dashboard counts use `prisma.order.count` grouped by the D2 status sets inside the day window, plus a fixed-limit newest-first recent-orders query. Product search and the order-creation pickers reuse the same membership-gated, escaped, tenant-scoped service pattern (active, non-deleted products for the picker). See the M8 milestone record in `ai-context/07-current-milestone.md` and §2/§3 of `CURRENT_STATE.md` for the concrete commits.
+
+**Consequences:** "Today's Orders" is meaningful for a business in any timezone and degrades safely to UTC for a bad stored zone; `CANCELLED` orders never inflate the three §17 counters; order and picker searches stay literal (`%`/`_`/`\` are matched, not interpreted) and cannot read across tenants. Basic-only analytics is preserved — no charts or advanced reporting.
+
+**Alternatives considered:**
+
+- **Server/UTC day** — rejected by the owner: a business near a date boundary would see the wrong day's orders.
+- **Hardcoded region timezone (e.g. `Asia/Kathmandu`)** — rejected: not a general rule; the stored `Business.timezone` is authoritative and may legitimately be any IANA zone.
+- **`In Progress` including `CANCELLED` or excluding `OUT_FOR_DELIVERY`** — rejected: §17 names a fulfilment-progress metric; cancelled orders are outside it and `OUT_FOR_DELIVERY` is still in progress.
+- **Deferring product search and the order-creation pickers** — rejected by the owner: they are the search gaps §18/§20 tie to this milestone.
+- **Date-range / payment-status filters** — rejected for M8 as scope not required by the source.
+
+**Rationale:** keep the dashboard's headline numbers correct for the business's own clock, make every count explicable from the spec's status vocabulary, and close the search gaps the spec already names — without expanding into reporting, integrations, or new dependencies.
+
+**Security implications:** every count, list, search and picker result is membership-gated (`requireMembership`) and tenant-scoped; search terms are length-bounded and `LIKE`-escaped so a hostile term cannot broaden a query; picker option reads exclude soft-deleted rows and, for products, inactive rows.
+
+**Operational implications:** the day window is computed per request from the stored timezone; no schema change or migration is required (the `(businessId, createdAt)` and `(businessId, status)` indexes already exist).
+
+**Migration implications:** none.
+
+**Reconsideration conditions:** a product requirement for a different day boundary, new dashboard metrics or reporting, additional order filters (date range, payment status), or a change to the active-product/soft-delete rules.
 

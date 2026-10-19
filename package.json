@@ -10,7 +10,8 @@
     "lint": "eslint",
     "test": "node --import ./tests/helpers/register-unit.mjs --test \"tests/unit/**/*.test.ts\"",
     "test:db:setup": "node tests/helpers/setup-test-db.mjs",
-    "test:integration": "node --import ./tests/helpers/register.mjs --test --test-concurrency=1 \"tests/integration/**/*.test.ts\""
+    "test:integration": "node --import ./tests/helpers/register.mjs --test --test-concurrency=1 \"tests/integration/**/*.test.ts\"",
+    "test:e2e": "node tests/helpers/setup-e2e-db.mjs && playwright test"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.0",
@@ -26,6 +27,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",

@@ -27,6 +27,7 @@ This register records significant decisions without turning open questions into 
 | DEC-012 | Invitation token hashing strategy | ACCEPTED | Security/token storage |
 | DEC-013 | Order status transition and cancellation matrix (resolves AMB-002) | ACCEPTED (2026-10-18) | Orders/workflow |
 | DEC-014 | Dashboard "today" timezone, count semantics, and Milestone 8 search/filter scope | ACCEPTED (2026-10-18) | Dashboard/search/authorization |
+| DEC-015 | Milestone 9 scope and interim abuse protection (in-process fixed-window rate limiting) | ACCEPTED (2026-10-19) | Security/testing |
 
 > Numbering note: `DEC-010` is intentionally skipped here. `DEC-001` already
 > refers forward to a future, not-yet-registered `DEC-010` for the
@@ -411,4 +412,49 @@ No generic permission engine, global mixed role enum, or role hierarchy is intro
 **Migration implications:** none.
 
 **Reconsideration conditions:** a product requirement for a different day boundary, new dashboard metrics or reporting, additional order filters (date range, payment status), or a change to the active-product/soft-delete rules.
+
+## DEC-015 — Milestone 9 scope and interim abuse protection (in-process fixed-window rate limiting)
+
+**Status:** ACCEPTED (2026-10-19)  
+**Date:** 2026-10-19  
+**Accepted:** 2026-10-19 (scope approval by the owner)  
+**Scope:** Milestone 9 — Security testing, safe error handling, E2E and mobile verification
+
+**Context:** `docs/roadmap.md` defines Milestone 9 as "Security/testing — Tenant isolation, validation, safe error handling, E2E testing, and mobile testing". M1–M8 delivered strong service-level security controls but no automated E2E suite, no app-router-wide safe error boundaries, and no abuse protection on the three unauthenticated/unauthed boundary surfaces (`/track/[token]`, sign-in, invitation acceptance — recorded as pre-production items in `CURRENT_STATE.md` §10A and `docs/security.md` §7/§15). `MASTER_SPEC.md` §26 requires rate limiting for the public tracking endpoint ("if practical"), §35 requires a Playwright E2E critical path (Register → Create Business → Add Product → Add Customer → Create Order → Copy Tracking URL → Open Tracking URL → Update Order Status → Verify Customer Sees New Status), and `docs/testing.md` §8/§9 define the critical path and the responsive/keyboard expectations.
+
+**Decision (owner, 2026-10-19):**
+
+1. **Approved M9 scope:** Playwright E2E testing of the critical workflow (`docs/testing.md` §8); a dedicated `order_tracking_e2e` database with explicit guards that refuse dev/`_test`/production databases; tenant-isolation and authorization regression coverage; safe App Router error boundaries and safe server-side error logging (no logging framework; the `toSafeActionMessage` contract preserved unless inspection finds a real defect); responsive/browser verification at 375/768/1440 px; the focused keyboard/accessibility checks `docs/testing.md` §9 requires; the "1 orders" → "1 order" pagination-footer pluralization fix; and documentation updates that accurately reflect implementation and verification evidence. `@playwright/test` is approved as the only new dependency (development-only; unrelated dependencies stay out).
+2. **Rate limiting — option O-A, all three boundaries:** implement an **in-process, fixed-window limiter with bounded memory** (no new runtime dependency; no Redis or other shared store in M9) for (a) the public `/track/[token]` page, (b) the sign-in Server Action, and (c) the invitation-acceptance action.
+3. **Interim control with an explicit deployment dependency:** this limiter does **not** provide shared enforcement across application instances, and its state resets on restart and per instance. The selected hosting architecture at **M10 (Deployment)** must determine production-grade abuse protection. DEC-002 (hosting) is NOT resolved by M9.
+4. **Non-goals:** the limiter must not bypass existing authentication, invitation-token validation, tenant authorization, or session behavior; must not leak account existence, tokens, internal errors, or other sensitive information; must not allow one user's activity to lock out unrelated users unnecessarily; and its state must not grow without bound, including under malformed or attacker-controlled input.
+
+**Selected parameters (documented before implementation; tunable constants in `src/lib/security/rate-limit.ts`):**
+
+- **Window:** fixed windows, not sliding. `windowMs` per boundary.
+- **Thresholds (per client IP per boundary):** `/track/[token]` → **60 requests / 10 minutes** (all requests count — the page is cheap public content and no success/failure distinction exists at SSR time); sign-in → **10 *failed* attempts / 10 minutes** (successes never consume the budget, so a busy shared-office IP of legitimate users is not locked by one account's failures); invitation acceptance → **10 failed attempts / 10 minutes**. Rationale: thresholds are generous for humans but cap automated enumeration; counting only failures for the auth surfaces follows the owner's "don't let one user's activity lock out unrelated users" constraint.
+- **Keying:** `boundary + client IP`. The IP is read from the first hop of `x-forwarded-for` **only** (no other spoofable header), falling back to a constant local key when the header is absent (e.g. local dev). Without a trusted reverse proxy the IP is best-effort; this is recorded as part of the M10 dependency (the host must supply the real client IP and/or terminate abuse protection).
+- **Memory bounds:** buckets live in a single bounded `Map` capped at **10,000 keys**. When the cap is reached, the buckets with the **oldest** `windowStart` values are evicted first (oldest-window eviction, deterministic, O(1) amortized via an ordered deletion scan per insert batch). A cap hit therefore bounds memory even when keys are attacker-controlled (e.g. forged `x-forwarded-for` values); eviction can cause a re-window for unrelated evicted keys, which is accepted for the interim control.
+- **Response semantics:** `/track/[token]` when limited renders a generic "Too many requests — try again shortly" state (identical for limited requests regardless of token validity; a server component cannot emit HTTP 429 — an M10 host/proxy returning real 429s is part of the production design). Sign-in and invitation acceptance return the **existing generic action-error shape** with a generic "Too many attempts. Please try again later." message — identical for wrong-password and rate-limited cases, never revealing whether an account exists.
+- **Clock:** the limiter uses the existing `src/lib/time.ts` (`nowMs`) clock; tests inject time rather than sleeping.
+
+**Implementation:** a pure, framework-free module `src/lib/security/rate-limit.ts` (`consume(key) → { allowed, retryAfterMs }` plus reset/inspection helpers for tests), unit-tested for threshold edges, window expiration, bounded removal, and malformed-key safety; wired at the three boundaries with per-boundary integration/behavior tests. Existing authentication, invitation-token validation, tenant authorization, and session behavior remain the first and authoritative gates — the limiter runs in addition to them, never instead.
+
+**Consequences:** automated token/hit floods on the public route, credential stuffing on sign-in, and invitation-acceptance probing all become rate-limited long before M10; the control is conservative and provider-neutral, so no hosting decision is pre-empted. The interim nature is explicitly documented: per-instance state, reset on restart, content-level (not HTTP 429) throttling on the tracking page, and eviction behavior under key flooding.
+
+**Alternatives considered:**
+
+- **O-B (tracking route only)** — rejected by the owner: sign-in and invitation acceptance need the interim control too; all three §10A boundary leaks close together.
+- **O-C (defer everything to an M10 host-side limiter)** — rejected: leaves `docs/security.md` §15's release-gate item OPEN after the last pre-deployment coding milestone, and a provider-neutral interim control does not depend on (or pre-empt) DEC-002.
+- **Redis / shared store now** — rejected: `DO_NOT_BUILD.md` §2 forbids unjustified queuing/cache infrastructure; DEC-002 stays open to M10.
+- **Sliding-window / token-bucket algorithm** — rejected for M9 simplicity: a fixed window is trivial to reason about and test; reconsider only if production evidence demands it.
+- **Keying by account email** — rejected: enables locking a victim's account out of sign-in (denial against unrelated users/fail-locked victims) and leaks nothing useful; per-IP is the owner-approved strategy.
+
+**Security implications:** the limiter runs *after* existing gates and adds throttling only; generic messaging on all limited paths; no account-existence, token, or internal-error leakage; bounded memory under attacker-controlled key input; the multi-instance and reset-on-restart limitations are recorded here and as an explicit M10 deployment dependency in `CURRENT_STATE.md` §10A.
+
+**Operational implications:** thresholds live as named constants in `src/lib/security/rate-limit.ts` and are restated in `docs/security.md` §7 so operations can retune them without code archaeology. No schema change; limiter state is process-local memory (intentionally not persisted).
+
+**Migration implications:** none.
+
+**Reconsideration conditions:** M10 hosting selection (DEC-002) choosing a shared-store or edge/proxy limiter; evidence that the interim thresholds wrongly throttle legitimate traffic; or a requirement for HTTP-429 semantics at the application tier.
 

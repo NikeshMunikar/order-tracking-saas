@@ -2,8 +2,8 @@
 
 Document Status: Active  
 Source Authority: `MASTER_SPEC.md` + applicable accepted decisions  
-Last Reviewed: 2026-09-05  
-Implementation State: Not Implemented
+Last Reviewed: 2026-10-19  
+Implementation State: Implemented in delivered-milestone scope — `node:test` unit and DB-backed integration suites exist through M7/M8, and M9 added the Playwright E2E suites (§8/§9 record where each part landed); planning sections for future milestones remain planned.
 
 ## 1. Testing principles
 

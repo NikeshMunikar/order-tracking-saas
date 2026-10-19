@@ -1,8 +1,25 @@
 import { InvalidTrackingLink } from "@/components/tracking/tracking-invalid";
 import { TrackingLinkActions } from "@/components/tracking/tracking-link-actions";
+import { TrackingRateLimited } from "@/components/tracking/tracking-rate-limited";
+import { headers } from "next/headers";
 import { isOrderStatus } from "@/lib/order-status";
+import { readClientIdentityFromHeaders } from "@/lib/security/client-identity";
+import {
+  buildRateLimitKey,
+  createRateLimiter,
+  RATE_LIMIT_BOUNDARY_TRACKING,
+  TRACKING_RATE_LIMIT,
+} from "@/lib/security/rate-limit";
 import { buildTrackingTimeline, trackingStatusLabel } from "@/lib/tracking";
 import { getPublicTrackingOrder } from "@/server/tracking/tracking-service";
+
+// Interim in-process fixed-window rate limiter for this boundary (DEC-015):
+// process-local state, per instance, reset on restart — NOT shared across
+// instances and not production-grade; the M10 host design must provide
+// shared abuse protection. It runs before the token lookup and never
+// weakens it: a throttled client gets a generic state without any token
+// existence hint, and the service behavior is unchanged.
+const trackingRateLimiter = createRateLimiter(TRACKING_RATE_LIMIT);
 
 // M7 public customer tracking page (MASTER_SPEC §15/§16, docs/ui-ux.md §10).
 //
@@ -45,6 +62,20 @@ export default async function TrackOrderPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+
+  // Abuse protection runs before anything else (DEC-015). First x-forwarded-for
+  // hop only; missing header ⇒ the constant local identity. All requests
+  // count against the window (no success/failure distinction at SSR time).
+  const requestHeaders = await headers();
+  const clientIdentity = readClientIdentityFromHeaders(requestHeaders);
+  const rateLimitDecision = trackingRateLimiter.consume(
+    buildRateLimitKey(RATE_LIMIT_BOUNDARY_TRACKING, clientIdentity),
+  );
+
+  if (!rateLimitDecision.allowed) {
+    return <TrackingRateLimited />;
+  }
+
   const tracking = await getPublicTrackingOrder(token);
 
   if (!tracking) {

@@ -4,7 +4,7 @@ import { CreateOrderForm } from "@/components/order/order-forms";
 import { requireSession } from "@/server/auth/session";
 import { getAuthorizedBusiness } from "@/server/business/queries";
 import { listCustomerOptions } from "@/server/customer/customer-service";
-import { listProducts } from "@/server/product/product-service";
+import { listProductOptions } from "@/server/product/product-service";
 
 // M5 order-creation page (MASTER_SPEC.md §18 flow: customer, products,
 // quantity, delivery/pickup, discount, delivery fee, payment status,
@@ -12,9 +12,10 @@ import { listProducts } from "@/server/product/product-service";
 // membership-guarded services; the totals shown later on the order page are
 // calculated ONLY server-side (§29) — this form displays no amounts.
 //
-// The customer/product dropdowns are simple selects (§18 shows a search
-// affordance; search-driven pickers are deferred with the dashboard
-// search/filter milestone).
+// M8 (§18 "Search customer"): the customer/product selectors gained a
+// type-to-filter box over the server-loaded, membership-scoped option lists;
+// the product options now come from `listProductOptions` (ACTIVE, non-deleted
+// products only).
 
 export default async function NewOrderPage({
   params,
@@ -30,7 +31,7 @@ export default async function NewOrderPage({
 
   const [customers, products] = await Promise.all([
     listCustomerOptions(session.user.id, businessId),
-    listProducts(session.user.id, businessId),
+    listProductOptions(session.user.id, businessId),
   ]);
 
   return (
@@ -53,7 +54,7 @@ export default async function NewOrderPage({
         <CreateOrderForm
           businessId={businessId}
           customers={customers}
-          products={products.filter((product) => product.active)}
+          products={products}
         />
       </div>
     </div>

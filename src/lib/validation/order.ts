@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ORDER_STATUSES } from "@/lib/order-status";
+import type { OrderStatusValue } from "@/lib/order-status";
 
 // Server-side validation boundary for M5 order inputs. MASTER_SPEC.md §9/§10
 // and docs/database.md §§7–9 define the fields; §28 names the rules that are
@@ -114,3 +115,90 @@ export const updateOrderStatusSchema = z.object({
 });
 
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+
+// ---------------------------------------------------------------------------
+// Order-list search/filter/pagination query (Milestone 8, decisions D3/D4).
+//
+// The order list accepts `q` (order number OR customer name), `status` (one of
+// the DEC-013 statuses) and `page`. Like the M3 customer list, the values come
+// straight from the URL and are validated/coerced here rather than trusted, and
+// they are parsed INDEPENDENTLY so a malformed `page` does not discard a valid
+// search term (and vice versa).
+// ---------------------------------------------------------------------------
+
+/** Max length accepted for the order search term. */
+export const ORDER_SEARCH_MAX_LENGTH = 120;
+
+/**
+ * Highest accepted order list page number. See `CUSTOMER_PAGE_MAX`: the bound
+ * exists only to keep a hostile/corrupted `page` from overflowing
+ * `skip = (page - 1) * pageSize`; 10,000 pages x `ORDER_PAGE_SIZE` (20)
+ * addresses 200,000 orders for one business, far beyond MVP scale.
+ */
+export const ORDER_PAGE_MAX = 10_000;
+
+const singleStringParam = (value: unknown) => (typeof value === "string" ? value : undefined);
+
+/** Order search term exactly as it arrives from the URL (untrusted). */
+export const orderSearchFieldSchema = z.preprocess(
+  singleStringParam,
+  z.string().trim().max(ORDER_SEARCH_MAX_LENGTH, "Search text is too long").optional(),
+);
+
+/** Status filter exactly as it arrives from the URL (untrusted). */
+export const orderStatusFilterFieldSchema = z.preprocess(
+  singleStringParam,
+  z.enum(ORDER_STATUSES, { message: "Invalid status filter." }).optional(),
+);
+
+/** Page number exactly as it arrives from the URL (untrusted). */
+export const orderPageFieldSchema = z.preprocess(
+  singleStringParam,
+  z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(ORDER_PAGE_MAX, `Page must be ${ORDER_PAGE_MAX} or less`)
+    .optional(),
+);
+
+export const orderListQuerySchema = z.object({
+  q: orderSearchFieldSchema,
+  status: orderStatusFilterFieldSchema,
+  page: orderPageFieldSchema,
+});
+export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
+
+export type OrderListQueryInput = {
+  q: string | undefined;
+  status: OrderStatusValue | undefined;
+  page: number | undefined;
+  searchError: string | undefined;
+  statusError: string | undefined;
+  pageError: string | undefined;
+};
+
+/**
+ * Parse the order-list parameters *independently* (same rationale as
+ * `parseCustomerListQuery`): an unparseable value becomes `undefined` (the
+ * unfiltered / first-page behaviour) with a message, while the other
+ * parameters still apply.
+ */
+export function parseOrderListQuery(raw: {
+  q?: unknown;
+  status?: unknown;
+  page?: unknown;
+}): OrderListQueryInput {
+  const search = orderSearchFieldSchema.safeParse(raw.q);
+  const status = orderStatusFilterFieldSchema.safeParse(raw.status);
+  const page = orderPageFieldSchema.safeParse(raw.page);
+
+  return {
+    q: search.success ? search.data : undefined,
+    status: status.success ? status.data : undefined,
+    page: page.success ? page.data : undefined,
+    searchError: search.success ? undefined : (search.error.issues[0]?.message ?? "Invalid search."),
+    statusError: status.success ? undefined : (status.error.issues[0]?.message ?? "Invalid status filter."),
+    pageError: page.success ? undefined : (page.error.issues[0]?.message ?? "Invalid page."),
+  };
+}

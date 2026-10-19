@@ -63,6 +63,12 @@ export default async function BusinessLayout({
         aria-label="Business sections"
         className="flex gap-6 border-b border-neutral-200 text-sm font-medium"
       >
+        <Link
+          href={`/dashboard/${businessId}`}
+          className="pb-2 text-neutral-700 hover:text-neutral-900"
+        >
+          Dashboard
+        </Link>
         {isOwner && (
           <Link
             href={`/dashboard/${businessId}/settings`}

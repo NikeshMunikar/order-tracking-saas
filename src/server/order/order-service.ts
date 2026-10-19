@@ -1,11 +1,18 @@
 import "server-only";
 
+import type { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/db/client";
+import { escapeLikePattern } from "@/lib/db/like";
+import { businessDayWindow } from "@/lib/business-day";
 import {
   computeLineSubtotal,
   computeOrderTotals,
 } from "@/lib/money";
-import { canTransitionOrderStatus } from "@/lib/order-status";
+import {
+  canTransitionOrderStatus,
+  IN_PROGRESS_ORDER_STATUSES,
+} from "@/lib/order-status";
 import type { OrderStatusValue } from "@/lib/order-status";
 import { generateSecureToken } from "@/lib/security/token";
 import { requireMembership } from "@/server/business/authorization";
@@ -66,6 +73,74 @@ export type OrderListEntry = {
   itemCount: number;
   createdAt: Date;
 };
+
+/** Orders listed per page (M8 reuses the M3 customer-list page size). */
+export const ORDER_PAGE_SIZE = 20;
+
+/** Most recent orders the dashboard shows (M8 — "recent orders"). */
+export const DASHBOARD_RECENT_ORDERS_LIMIT = 5;
+
+export type OrderListParams = {
+  /** Untrusted search term (already length-checked by the caller's schema). */
+  query?: string;
+  /** Optional DEC-013 status filter. */
+  status?: OrderStatusValue;
+  /** 1-based page number. */
+  page?: number;
+};
+
+export type OrderListResult = {
+  orders: OrderListEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+/** Shapes a raw order row into the list entry the order list/dashboard render. */
+function toOrderListEntry(order: {
+  id: string;
+  orderNumber: string;
+  status: string;
+  paymentStatus: string;
+  total: { toFixed(digits: number): string };
+  createdAt: Date;
+  customer: { name: string };
+  _count: { items: number };
+}): OrderListEntry {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    total: order.total.toFixed(2),
+    customerName: order.customer.name,
+    itemCount: order._count.items,
+    createdAt: order.createdAt,
+  };
+}
+
+/** Selective projection for the order list and the dashboard's recent orders. */
+const orderListSelect = {
+  id: true,
+  orderNumber: true,
+  status: true,
+  paymentStatus: true,
+  total: true,
+  createdAt: true,
+  customer: { select: { name: true } },
+  _count: { select: { items: true } },
+} as const;
+
+/** Trim, and treat an empty term as "no filter". */
+function normalizeSearch(query: string | undefined): string | undefined {
+  const trimmed = query?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizePage(page: number | undefined): number {
+  return page === undefined || !Number.isFinite(page) || page < 1 ? 1 : Math.trunc(page);
+}
 
 export type OrderItemDetail = {
   id: string;
@@ -509,37 +584,134 @@ export async function getOrder(
 }
 
 /**
- * List the business's orders, newest first. Deliberately without
- * search/filters: MASTER_SPEC defers search/filtering to M8.
+ * List one page of the business's orders, newest first, optionally filtered by
+ * an order-number / customer-name search term (literal, escaped LIKE) and a
+ * status (M8 — MASTER_SPEC §17/§44; decisions D3/D4). Pagination reuses the M3
+ * customer-list convention; the `(createdAt, id)` total order makes pages
+ * neither duplicate nor skip rows.
+ *
+ * Requires membership (OWNER or STAFF). The `businessId` is a navigation
+ * identifier only; authorization is re-resolved here, and every query is
+ * additionally scoped by `businessId`, so results can never cross tenants.
  */
-export async function listOrders(userId: string, businessId: string): Promise<OrderListEntry[]> {
+export async function listOrders(
+  userId: string,
+  businessId: string,
+  params: OrderListParams = {},
+): Promise<OrderListResult> {
   await requireMembership(userId, businessId);
 
-  const orders = await prisma.order.findMany({
-    where: { businessId },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: {
-      id: true,
-      orderNumber: true,
-      status: true,
-      paymentStatus: true,
-      total: true,
-      createdAt: true,
-      customer: { select: { name: true } },
-      _count: { select: { items: true } },
-    },
-  });
+  const search = normalizeSearch(params.query);
+  const pattern = search === undefined ? undefined : escapeLikePattern(search);
+  const page = normalizePage(params.page);
 
-  return orders.map((order) => ({
-    id: order.id,
-    orderNumber: order.orderNumber,
-    status: order.status,
-    paymentStatus: order.paymentStatus,
-    total: order.total.toFixed(2),
-    customerName: order.customer.name,
-    itemCount: order._count.items,
-    createdAt: order.createdAt,
-  }));
+  const where: Prisma.OrderWhereInput = {
+    businessId,
+    ...(params.status === undefined ? {} : { status: params.status }),
+    ...(pattern === undefined
+      ? {}
+      : {
+          OR: [
+            { orderNumber: { contains: pattern, mode: "insensitive" as const } },
+            { customer: { name: { contains: pattern, mode: "insensitive" as const } } },
+          ],
+        }),
+  };
+
+  const [orders, total] = await prisma.$transaction([
+    prisma.order.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (page - 1) * ORDER_PAGE_SIZE,
+      take: ORDER_PAGE_SIZE,
+      select: orderListSelect,
+    }),
+    prisma.order.count({ where }),
+  ]);
+
+  return {
+    orders: orders.map(toOrderListEntry),
+    total,
+    page,
+    pageSize: ORDER_PAGE_SIZE,
+    totalPages: Math.max(1, Math.ceil(total / ORDER_PAGE_SIZE)),
+  };
+}
+
+export type DashboardSummary = {
+  /** Timezone actually used for the local day (UTC on invalid/missing zone). */
+  timeZone: string;
+  /** Start-inclusive UTC bound of the business-local day. */
+  dayStart: Date;
+  /** End-exclusive UTC bound of the business-local day. */
+  dayEnd: Date;
+  /** Orders created during the local day, by current status (D2). */
+  pending: number;
+  inProgress: number;
+  delivered: number;
+  /** Newest orders regardless of day (limit DASHBOARD_RECENT_ORDERS_LIMIT). */
+  recentOrders: OrderListEntry[];
+};
+
+/**
+ * Dashboard summary for one business (M8 — MASTER_SPEC §17; decisions D1/D2).
+ *
+ * "Today" is the business's LOCAL calendar day derived from `Business.timezone`
+ * (falling back to UTC when the stored value is not a valid zone), queried as a
+ * start-inclusive / end-exclusive range. Counts cover only orders CREATED
+ * during that day, grouped by their CURRENT status: PENDING → pending,
+ * CONFIRMED/PREPARING/READY/OUT_FOR_DELIVERY → inProgress, DELIVERED →
+ * delivered; CANCELLED is excluded from every count. Recent orders are the
+ * newest overall (not restricted to today).
+ *
+ * Requires membership (OWNER or STAFF); both roles may view orders (§4).
+ */
+export async function getDashboardSummary(
+  userId: string,
+  businessId: string,
+  now: Date,
+): Promise<DashboardSummary> {
+  await requireMembership(userId, businessId);
+
+  const business = await prisma.business.findUnique({
+    where: { id: businessId },
+    select: { timezone: true },
+  });
+  const { start, end, timeZone } = businessDayWindow(now, business?.timezone ?? null);
+
+  const withinDay = { gte: start, lt: end };
+
+  const [pending, inProgress, delivered, recentOrders] = await prisma.$transaction([
+    prisma.order.count({
+      where: { businessId, status: "PENDING", createdAt: withinDay },
+    }),
+    prisma.order.count({
+      where: {
+        businessId,
+        status: { in: [...IN_PROGRESS_ORDER_STATUSES] },
+        createdAt: withinDay,
+      },
+    }),
+    prisma.order.count({
+      where: { businessId, status: "DELIVERED", createdAt: withinDay },
+    }),
+    prisma.order.findMany({
+      where: { businessId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: DASHBOARD_RECENT_ORDERS_LIMIT,
+      select: orderListSelect,
+    }),
+  ]);
+
+  return {
+    timeZone,
+    dayStart: start,
+    dayEnd: end,
+    pending,
+    inProgress,
+    delivered,
+    recentOrders: recentOrders.map(toOrderListEntry),
+  };
 }
 
 export type CustomerOrderEntry = {

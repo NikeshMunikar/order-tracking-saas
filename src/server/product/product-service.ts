@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db/client";
+import { escapeLikePattern } from "@/lib/db/like";
 import {
   lockBusinessOwnerRows,
   requireMembership,
@@ -65,28 +66,88 @@ export type ProductDetail = ProductSummary & {
   updatedAt: Date;
 };
 
+/** One option in the M5 order-creation product selector. */
+export type ProductOption = {
+  id: string;
+  name: string;
+  price: string;
+};
+
+export type ProductListParams = {
+  /** Untrusted search term (already length-checked by the caller's schema). */
+  query?: string;
+};
+
+/** Trim, and treat an empty term as "no filter". */
+function normalizeSearch(query: string | undefined): string | undefined {
+  const trimmed = query?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
 /**
  * List a business's active AND inactive products (MASTER_SPEC.md §8 keeps both
- * in the table; inactivity is a flag, not a removal). M4 scope deliberately
- * has no search or pagination: per-tenant product counts are small, and the
- * M5 order-creation picker will query ACTIVE products separately. Ordering is
- * deterministic — active first, then by name, so the list is stable across
- * renders.
+ * in the table; inactivity is a flag, not a removal), optionally filtered by a
+ * name search (M8 — §20 lists "Search" among the product features). There is
+ * still no pagination: per-tenant product counts are small, so the list stays
+ * a single page and ordering is deterministic — active first, then by name, so
+ * the list is stable across renders.
+ *
+ * `%`, `_` and `\` are LIKE/ILIKE metacharacters and Prisma's string filters
+ * expose no escape option, so the search goes through `escapeLikePattern` and
+ * stays literal (M3 audit F1), while still using the normal Prisma query API —
+ * no raw SQL.
  */
 export async function listProducts(
   userId: string,
   businessId: string,
+  params: ProductListParams = {},
 ): Promise<ProductSummary[]> {
   await requireMembership(userId, businessId);
 
+  const search = normalizeSearch(params.query);
+  const pattern = search === undefined ? undefined : escapeLikePattern(search);
+
   const products = await prisma.product.findMany({
-    where: { businessId, deletedAt: null },
+    where: {
+      businessId,
+      deletedAt: null,
+      ...(pattern === undefined
+        ? {}
+        : { name: { contains: pattern, mode: "insensitive" as const } }),
+    },
     select: productSummarySelect,
     orderBy: [{ active: "desc" }, { name: "asc" }, { id: "asc" }],
   });
 
   return products.map((product) => ({
     ...product,
+    price: product.price.toFixed(2),
+  }));
+}
+
+/**
+ * Options for the order-creation product selector (MASTER_SPEC.md §18): every
+ * ACTIVE, non-deleted product, name-ordered, no pagination — the picker must
+ * see the whole selectable list, unlike the paginated/searchable products page.
+ * Inactive products are excluded because they can no longer be ordered, and a
+ * soft-deleted product is excluded like everywhere else. Requires membership
+ * (OWNER or STAFF create orders).
+ */
+export async function listProductOptions(
+  userId: string,
+  businessId: string,
+): Promise<ProductOption[]> {
+  await requireMembership(userId, businessId);
+
+  const products = await prisma.product.findMany({
+    where: { businessId, deletedAt: null, active: true },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    select: { id: true, name: true, price: true },
+  });
+
+  return products.map((product) => ({
+    id: product.id,
+    name: product.name,
     price: product.price.toFixed(2),
   }));
 }

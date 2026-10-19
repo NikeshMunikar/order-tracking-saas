@@ -43,6 +43,19 @@ export const ALLOWED_ORDER_STATUS_TRANSITIONS: Record<OrderStatusValue, OrderSta
 /** Statuses the workflow can never leave (DEC-013 rule 3). */
 export const TERMINAL_ORDER_STATUSES: readonly OrderStatusValue[] = ["DELIVERED", "CANCELLED"];
 
+/**
+ * The statuses that make up the dashboard's "In Progress" metric (DEC-014 /
+ * Milestone 8 decision D2): every non-terminal, pre-delivery status. Together
+ * with `Pending` (`PENDING`) and `Delivered` (`DELIVERED`) this is the whole
+ * §17 metric vocabulary; `CANCELLED` is deliberately outside all three counts.
+ */
+export const IN_PROGRESS_ORDER_STATUSES: readonly OrderStatusValue[] = [
+  "CONFIRMED",
+  "PREPARING",
+  "READY",
+  "OUT_FOR_DELIVERY",
+];
+
 /** Human-readable labels for status displays and the change controls. */
 export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   PENDING: "Pending",

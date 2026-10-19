@@ -256,7 +256,7 @@ test("order rows stay tenant-scoped across every entry point", async () => {
   // Tenant B sees nothing from A; every entry point treats A's ids as
   // not-found or denies the member relationship.
   assert.equal(await getOrder(ownerB.id, businessB.id, orderA.id), null);
-  assert.deepEqual(await listOrders(ownerB.id, businessB.id), []);
+  assert.deepEqual((await listOrders(ownerB.id, businessB.id)).orders, []);
   await expectRejection(
     updateOrder(ownerB.id, businessB.id, orderA.id, {
       items: [{ productId: productA.id, quantity: 1 }],

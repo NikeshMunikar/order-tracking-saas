@@ -57,3 +57,35 @@ export type CreateProductInput = z.infer<typeof createProductSchema>;
 
 export const updateProductSchema = productFieldsSchema;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+
+// ---------------------------------------------------------------------------
+// Product-list search query (Milestone 8, decision D3 — MASTER_SPEC §20 lists
+// "Search" among the product features). The product list has no pagination by
+// design (per-tenant product counts are small), so only the search term is
+// validated here. The value comes from the URL and is untrusted.
+// ---------------------------------------------------------------------------
+
+/** Max length accepted for the product search term. */
+export const PRODUCT_SEARCH_MAX_LENGTH = 120;
+
+const singleStringParam = (value: unknown) => (typeof value === "string" ? value : undefined);
+
+export const productSearchFieldSchema = z.preprocess(
+  singleStringParam,
+  z.string().trim().max(PRODUCT_SEARCH_MAX_LENGTH, "Search text is too long").optional(),
+);
+
+export type ProductSearchQueryInput = {
+  q: string | undefined;
+  searchError: string | undefined;
+};
+
+/** Parse the product-list search term (a rejected value becomes no filter). */
+export function parseProductSearchQuery(raw: { q?: unknown }): ProductSearchQueryInput {
+  const search = productSearchFieldSchema.safeParse(raw.q);
+
+  return {
+    q: search.success ? search.data : undefined,
+    searchError: search.success ? undefined : (search.error.issues[0]?.message ?? "Invalid search."),
+  };
+}

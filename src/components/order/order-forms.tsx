@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -27,7 +27,7 @@ const ITEM_QUANTITY_MAX = 999;
 
 type CustomerOption = { id: string; name: string; phone: string };
 type ProductOption = { id: string; name: string; price: string };
-type ItemRow = { key: number; productId: string; quantity: string };
+type ItemRow = { key: string; productId: string; quantity: string };
 
 type OrderFieldValues = {
   deliveryType: string;
@@ -42,25 +42,71 @@ type OrderFieldValues = {
   notes: string;
 };
 
-let rowKeyCounter = 0;
-
-function makeRow(productId: string, quantity: string): ItemRow {
-  rowKeyCounter += 1;
-  return { key: rowKeyCounter, productId, quantity };
+/**
+ * Deterministic row keys (browser-pass fix 2026-10-19).
+ *
+ * The row keys previously came from a module-level counter, which diverges
+ * between the server render and client hydration (each module instance starts
+ * its own counter), producing a React hydration mismatch on the row input
+ * id/name attributes. Keys are now derived from React's `useId()` — an
+ * SSR-stable per-form seed — plus a per-instance counter for rows added later,
+ * so server HTML and hydrated HTML always agree.
+ */
+function rowKey(idBase: string, number: number): string {
+  return `${idBase}-row-${number}`;
 }
 
 function ItemRows({
   rows,
   products,
   onRowsChange,
+  idBase,
 }: {
   rows: ItemRow[];
   products: ProductOption[];
   onRowsChange: (next: ItemRow[]) => void;
+  idBase: string;
 }) {
+  const [search, setSearch] = useState("");
+  // Counter for rows added after mount; starts at the initial row count so the
+  // generated keys never collide with any existing one.
+  const nextRowNumber = useRef(rows.length);
+
+  const term = search.trim().toLowerCase();
+  const matching =
+    term === ""
+      ? products
+      : products.filter((product) => product.name.toLowerCase().includes(term));
+
+  // Keep a row's current selection visible even when the filter excludes it, so
+  // typing in the search box never silently clears a chosen product.
+  const optionsForRow = (selectedId: string) => {
+    const selected = products.find((product) => product.id === selectedId);
+    if (selected && !matching.some((product) => product.id === selected.id)) {
+      return [selected, ...matching];
+    }
+
+    return matching;
+  };
+
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-sm font-medium text-neutral-700">Items</span>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="order-item-search" className="text-sm font-medium text-neutral-700">
+          Items
+        </label>
+        <input
+          id="order-item-search"
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Filter products by name"
+          className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
+        />
+      </div>
+      {term !== "" && matching.length === 0 && (
+        <p className="text-xs text-neutral-500">No products match &ldquo;{search}&rdquo;.</p>
+      )}
       {rows.map((row, index) => (
         <div key={row.key} className="flex items-end gap-2">
           <div className="flex grow flex-col gap-1.5">
@@ -82,7 +128,7 @@ function ItemRows({
               className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
             >
               <option value="">Select a product…</option>
-              {products.map((product) => (
+              {optionsForRow(row.productId).map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name} (NPR {product.price})
                 </option>
@@ -124,7 +170,13 @@ function ItemRows({
           {index === rows.length - 1 && (
             <button
               type="button"
-              onClick={() => onRowsChange([...rows, makeRow("", "1")])}
+              onClick={() => {
+                nextRowNumber.current += 1;
+                onRowsChange([
+                  ...rows,
+                  { key: rowKey(idBase, nextRowNumber.current), productId: "", quantity: "1" },
+                ]);
+              }}
               className="rounded-md border border-neutral-300 px-2 py-2 text-xs text-neutral-600 transition hover:bg-neutral-100"
             >
               Add item
@@ -264,24 +316,57 @@ function CustomerField({
   customers: CustomerOption[];
   defaultCustomerId?: string;
 }) {
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(defaultCustomerId ?? "");
+
+  const term = search.trim().toLowerCase();
+  const matching =
+    term === ""
+      ? customers
+      : customers.filter(
+          (customer) =>
+            customer.name.toLowerCase().includes(term) ||
+            customer.phone.toLowerCase().includes(term),
+        );
+
+  // Keep the selected customer visible even when the filter excludes it, so
+  // typing in the search box never silently clears the choice.
+  const selected = customers.find((customer) => customer.id === selectedId);
+  const options =
+    selected && !matching.some((customer) => customer.id === selected.id)
+      ? [selected, ...matching]
+      : matching;
+
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor="customerId" className="text-sm font-medium text-neutral-700">
         Customer
       </label>
+      <input
+        type="search"
+        aria-label="Filter customers"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Filter customers by name or phone"
+        className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
+      />
       <select
         id="customerId"
         name="customerId"
-        defaultValue={defaultCustomerId ?? ""}
+        value={selectedId}
+        onChange={(event) => setSelectedId(event.target.value)}
         className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
       >
         <option value="">Select a customer…</option>
-        {customers.map((customer) => (
+        {options.map((customer) => (
           <option key={customer.id} value={customer.id}>
             {customer.name} ({customer.phone})
           </option>
         ))}
       </select>
+      {term !== "" && matching.length === 0 && (
+        <p className="text-xs text-neutral-500">No customers match &ldquo;{search}&rdquo;.</p>
+      )}
     </div>
   );
 }
@@ -309,7 +394,10 @@ export function CreateOrderForm({
 }) {
   const router = useRouter();
   const [state, formAction] = useActionState(createOrderAction, initialCreateState);
-  const [rows, setRows] = useState<ItemRow[]>([makeRow(products[0]?.id ?? "", "1")]);
+  const idBase = useId();
+  const [rows, setRows] = useState<ItemRow[]>(() => [
+    { key: rowKey(idBase, 1), productId: products[0]?.id ?? "", quantity: "1" },
+  ]);
 
   useEffect(() => {
     if (state.status === "success") {
@@ -322,7 +410,7 @@ export function CreateOrderForm({
       <input type="hidden" name="businessId" value={businessId} />
 
       <CustomerField customers={customers} />
-      <ItemRows rows={rows} products={products} onRowsChange={setRows} />
+      <ItemRows rows={rows} products={products} onRowsChange={setRows} idBase={idBase} />
       <DeliveryAndPaymentFields defaultValues={emptyFieldValues} />
 
       {state.status === "error" && (
@@ -350,8 +438,13 @@ export function EditOrderForm({
   initialRows: Array<{ productId: string | null; quantity: number }>;
 }) {
   const [state, formAction] = useActionState(updateOrderAction, initialUpdateState);
-  const [rows, setRows] = useState<ItemRow[]>(
-    initialRows.map((row) => makeRow(row.productId ?? "", String(row.quantity))),
+  const idBase = useId();
+  const [rows, setRows] = useState<ItemRow[]>(() =>
+    initialRows.map((row, index) => ({
+      key: rowKey(idBase, index + 1),
+      productId: row.productId ?? "",
+      quantity: String(row.quantity),
+    })),
   );
 
   return (
@@ -361,7 +454,7 @@ export function EditOrderForm({
       {/* The customer on an existing order cannot be changed (M5 scope
           decision): the field is absent from the update action entirely. */}
 
-      <ItemRows rows={rows} products={products} onRowsChange={setRows} />
+      <ItemRows rows={rows} products={products} onRowsChange={setRows} idBase={idBase} />
       <DeliveryAndPaymentFields defaultValues={defaultValues} />
 
       {state.status === "error" && (
@@ -385,8 +478,12 @@ export function EditOrderForm({
  * Status change controls (M6/DEC-013). Only the statuses the server would
  * accept from the order's CURRENT status are offered (docs/ui-ux.md §7: "The
  * UI must not offer transitions that the server rejects. The server remains
- * authoritative.") — each option is a submit button whose value is the target
- * status, so a hand-crafted request is still re-validated by the service.
+ * authoritative.") — each option is a radio input named `status` whose value is
+ * the target status, so a hand-crafted request is still re-validated by the
+ * service. A radio (rather than one submit button per status) is deliberate:
+ * browser pass 2026-10-19 found that a React server action does not reliably
+ * include the *clicked submit button's* `name`/`value` pair, while regular form
+ * controls (like radio inputs) travel in FormData with and without JavaScript.
  * Terminal orders render no controls at all.
  */
 export function UpdateStatusForm({
@@ -434,25 +531,27 @@ export function UpdateStatusForm({
         />
       </div>
 
-      {/* One button per allowed next status: easy on mobile (§34) and no
-          invalid option can be submitted from the UI. */}
-      <div className="flex flex-wrap gap-2">
+      {/* One radio per allowed next status: large tap targets on mobile (§34)
+          and no invalid option can be submitted from the UI. */}
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-sm font-medium text-neutral-700">Next status</legend>
         {nextStatuses.map((status) => (
-          <button
-            key={status}
-            type="submit"
-            name="status"
-            value={status}
-            disabled={isPending}
-            className={
-              status === "CANCELLED"
-                ? "rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-60"
-                : "rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-60"
-            }
-          >
+          <label key={status} className="flex items-center gap-2 text-sm text-neutral-800">
+            <input
+              type="radio"
+              name="status"
+              value={status}
+              required
+              disabled={isPending}
+              className="accent-neutral-900"
+            />
             {status === "CANCELLED" ? "Cancel order" : `Mark ${orderStatusLabel(status).toLowerCase()}`}
-          </button>
+          </label>
         ))}
+      </fieldset>
+
+      <div>
+        <SubmitButton>Update status</SubmitButton>
       </div>
 
       {state.status === "error" && (

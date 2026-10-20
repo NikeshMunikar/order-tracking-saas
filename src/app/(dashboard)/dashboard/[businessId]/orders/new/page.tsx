@@ -27,7 +27,7 @@ export default async function NewOrderPage({
 
   // getAuthorizedBusiness resolves membership for the URL businessId; a
   // non-member gets the same "no access" response as the other pages.
-  await getAuthorizedBusiness(session.user.id, businessId);
+  const authorized = await getAuthorizedBusiness(session.user.id, businessId);
 
   const [customers, products] = await Promise.all([
     listCustomerOptions(session.user.id, businessId),
@@ -53,6 +53,7 @@ export default async function NewOrderPage({
       <div className="rounded-md border border-neutral-200 bg-white p-6">
         <CreateOrderForm
           businessId={businessId}
+          currency={authorized.business.currency}
           customers={customers}
           products={products}
         />

@@ -8,6 +8,7 @@ import {
   ORDER_SEARCH_MAX_LENGTH,
   parseOrderListQuery,
 } from "@/lib/validation/order";
+import { formatMoney } from "@/lib/money";
 import { ORDER_STATUSES, orderStatusLabel } from "@/lib/order-status";
 
 // M5 Orders list (MASTER_SPEC.md roadmap: "Orders: Create, View, Edit,
@@ -34,24 +35,25 @@ export default async function OrdersPage({
   const rawSearchParams = await searchParams;
   const session = await requireSession();
 
-  let isMember = false;
-  try {
-    await getAuthorizedBusiness(session.user.id, businessId);
-    isMember = true;
-  } catch (error) {
-    if (error instanceof BusinessNotFoundError) {
-      return (
-        <div className="max-w-lg rounded-md border border-neutral-200 bg-white p-6">
-          <h2 className="text-base font-semibold text-neutral-900">No access</h2>
-          <p className="mt-2 text-sm text-neutral-600">
-            You are not a member of this business.
-          </p>
-        </div>
-      );
-    }
+  const authorized = await getAuthorizedBusiness(session.user.id, businessId).catch(
+    (error: unknown) => {
+      if (error instanceof BusinessNotFoundError) return null;
+      throw error;
+    },
+  );
 
-    throw error;
+  if (!authorized) {
+    return (
+      <div className="max-w-lg rounded-md border border-neutral-200 bg-white p-6">
+        <h2 className="text-base font-semibold text-neutral-900">No access</h2>
+        <p className="mt-2 text-sm text-neutral-600">
+          You are not a member of this business.
+        </p>
+      </div>
+    );
   }
+
+  const business = authorized.business;
 
   const parsed = parseOrderListQuery({
     q: rawSearchParams.q,
@@ -63,13 +65,11 @@ export default async function OrdersPage({
 
   // Membership was already verified above; listOrders re-checks it inside the
   // service so every entry point resolves authorization the same way.
-  const result = isMember
-    ? await listOrders(session.user.id, businessId, {
-        query: query.q,
-        status: query.status,
-        page: query.page,
-      })
-    : { orders: [], total: 0, page: 1, pageSize: 20, totalPages: 1 };
+  const result = await listOrders(session.user.id, businessId, {
+    query: query.q,
+    status: query.status,
+    page: query.page,
+  });
 
   const isSearching = typeof query.q === "string" && query.q.length > 0;
   const isFiltering = query.status !== undefined;
@@ -229,7 +229,9 @@ export default async function OrdersPage({
                   <td className="px-4 py-3 text-neutral-700">{order.customerName}</td>
                   <td className="px-4 py-3 text-neutral-700">{orderStatusLabel(order.status)}</td>
                   <td className="px-4 py-3 text-neutral-700">{order.paymentStatus}</td>
-                  <td className="px-4 py-3 text-neutral-900">NPR {order.total}</td>
+                  <td className="px-4 py-3 text-neutral-900">
+                    {formatMoney(business.currency, order.total)}
+                  </td>
                   <td className="px-4 py-3 text-neutral-500">
                     {order.createdAt.toLocaleDateString()}
                   </td>

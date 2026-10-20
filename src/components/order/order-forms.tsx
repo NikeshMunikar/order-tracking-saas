@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
+import { formatMoney } from "@/lib/money";
 import { orderStatusLabel } from "@/lib/order-status";
 import type { OrderStatusValue } from "@/lib/order-status";
 import {
@@ -59,11 +60,13 @@ function rowKey(idBase: string, number: number): string {
 function ItemRows({
   rows,
   products,
+  currency,
   onRowsChange,
   idBase,
 }: {
   rows: ItemRow[];
   products: ProductOption[];
+  currency: string;
   onRowsChange: (next: ItemRow[]) => void;
   idBase: string;
 }) {
@@ -130,7 +133,7 @@ function ItemRows({
               <option value="">Select a product…</option>
               {optionsForRow(row.productId).map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.name} (NPR {product.price})
+                  {product.name} ({formatMoney(currency, product.price)})
                 </option>
               ))}
             </select>
@@ -200,7 +203,13 @@ function ItemRows({
   );
 }
 
-function DeliveryAndPaymentFields({ defaultValues }: { defaultValues: OrderFieldValues }) {
+function DeliveryAndPaymentFields({
+  defaultValues,
+  currency,
+}: {
+  defaultValues: OrderFieldValues;
+  currency: string;
+}) {
   return (
     <>
       <div className="flex flex-col gap-1.5">
@@ -248,7 +257,7 @@ function DeliveryAndPaymentFields({ defaultValues }: { defaultValues: OrderField
       {/* Money is entered as decimal STRINGS end-to-end (DEC-006); the schema
           and the service — not the browser — decide what a valid amount is. */}
       <TextField
-        label="Delivery fee (NPR)"
+        label={`Delivery fee (${currency})`}
         name="deliveryFee"
         type="text"
         inputMode="decimal"
@@ -257,7 +266,7 @@ function DeliveryAndPaymentFields({ defaultValues }: { defaultValues: OrderField
         required
       />
       <TextField
-        label="Discount (NPR)"
+        label={`Discount (${currency})`}
         name="discount"
         type="text"
         inputMode="decimal"
@@ -385,10 +394,12 @@ const emptyFieldValues: OrderFieldValues = {
 
 export function CreateOrderForm({
   businessId,
+  currency,
   customers,
   products,
 }: {
   businessId: string;
+  currency: string;
   customers: CustomerOption[];
   products: ProductOption[];
 }) {
@@ -410,8 +421,14 @@ export function CreateOrderForm({
       <input type="hidden" name="businessId" value={businessId} />
 
       <CustomerField customers={customers} />
-      <ItemRows rows={rows} products={products} onRowsChange={setRows} idBase={idBase} />
-      <DeliveryAndPaymentFields defaultValues={emptyFieldValues} />
+      <ItemRows
+        rows={rows}
+        products={products}
+        currency={currency}
+        onRowsChange={setRows}
+        idBase={idBase}
+      />
+      <DeliveryAndPaymentFields defaultValues={emptyFieldValues} currency={currency} />
 
       {state.status === "error" && (
         <p role="alert" className="text-sm text-red-600">
@@ -426,12 +443,14 @@ export function CreateOrderForm({
 
 export function EditOrderForm({
   businessId,
+  currency,
   orderId,
   products,
   defaultValues,
   initialRows,
 }: {
   businessId: string;
+  currency: string;
   orderId: string;
   products: ProductOption[];
   defaultValues: OrderFieldValues;
@@ -454,8 +473,14 @@ export function EditOrderForm({
       {/* The customer on an existing order cannot be changed (M5 scope
           decision): the field is absent from the update action entirely. */}
 
-      <ItemRows rows={rows} products={products} onRowsChange={setRows} idBase={idBase} />
-      <DeliveryAndPaymentFields defaultValues={defaultValues} />
+      <ItemRows
+        rows={rows}
+        products={products}
+        currency={currency}
+        onRowsChange={setRows}
+        idBase={idBase}
+      />
+      <DeliveryAndPaymentFields defaultValues={defaultValues} currency={currency} />
 
       {state.status === "error" && (
         <p role="alert" className="text-sm text-red-600">

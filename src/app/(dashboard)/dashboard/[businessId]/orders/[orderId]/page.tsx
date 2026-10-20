@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { UpdateStatusForm } from "@/components/order/order-forms";
 import { TrackingLinkActions } from "@/components/tracking/tracking-link-actions";
+import { formatMoney } from "@/lib/money";
 import { isOrderStatus, nextOrderStatuses, orderStatusLabel } from "@/lib/order-status";
 import { requireSession } from "@/server/auth/session";
 import { getAuthorizedBusiness } from "@/server/business/queries";
@@ -26,6 +27,7 @@ export default async function OrderDetailPage({
   const session = await requireSession();
 
   const authorized = await getAuthorizedBusiness(session.user.id, businessId);
+  const currency = authorized.business.currency;
 
   const order = await getOrder(session.user.id, businessId, orderId);
   if (!order) {
@@ -109,19 +111,19 @@ export default async function OrderDetailPage({
           <dl className="mt-3 flex flex-col gap-2 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-neutral-500">Subtotal</dt>
-              <dd className="text-neutral-900">{order.subtotal}</dd>
+              <dd className="text-neutral-900">{formatMoney(currency, order.subtotal)}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-neutral-500">Discount</dt>
-              <dd className="text-neutral-900">{order.discount}</dd>
+              <dd className="text-neutral-900">{formatMoney(currency, order.discount)}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-neutral-500">Delivery fee</dt>
-              <dd className="text-neutral-900">{order.deliveryFee}</dd>
+              <dd className="text-neutral-900">{formatMoney(currency, order.deliveryFee)}</dd>
             </div>
             <div className="flex justify-between gap-4 border-t border-neutral-200 pt-2">
               <dt className="font-medium text-neutral-700">Total</dt>
-              <dd className="font-medium text-neutral-900">{order.total}</dd>
+              <dd className="font-medium text-neutral-900">{formatMoney(currency, order.total)}</dd>
             </div>
           </dl>
         </div>
@@ -153,9 +155,13 @@ export default async function OrderDetailPage({
                   <td className="px-4 py-2 font-medium text-neutral-900">
                     {item.productNameSnapshot}
                   </td>
-                  <td className="px-4 py-2 text-neutral-700">{item.unitPrice}</td>
+                  <td className="px-4 py-2 text-neutral-700">
+                    {formatMoney(currency, item.unitPrice)}
+                  </td>
                   <td className="px-4 py-2 text-neutral-700">{item.quantity}</td>
-                  <td className="px-4 py-2 text-neutral-900">{item.subtotal}</td>
+                  <td className="px-4 py-2 text-neutral-900">
+                    {formatMoney(currency, item.subtotal)}
+                  </td>
                 </tr>
               ))}
             </tbody>

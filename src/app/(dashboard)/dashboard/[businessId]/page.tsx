@@ -4,6 +4,7 @@ import { DASHBOARD_RECENT_ORDERS_LIMIT, getDashboardSummary } from "@/server/ord
 import { BusinessNotFoundError } from "@/server/business/errors";
 import { getAuthorizedBusiness } from "@/server/business/queries";
 import { requireSession } from "@/server/auth/session";
+import { formatMoney } from "@/lib/money";
 import { orderStatusLabel } from "@/lib/order-status";
 import { nowMs } from "@/lib/time";
 
@@ -28,15 +29,14 @@ export default async function BusinessDashboardPage({
   const session = await requireSession();
   const { businessId } = await params;
 
-  let isMember = false;
-  try {
-    await getAuthorizedBusiness(session.user.id, businessId);
-    isMember = true;
-  } catch (error) {
-    if (!(error instanceof BusinessNotFoundError)) throw error;
-  }
+  const authorized = await getAuthorizedBusiness(session.user.id, businessId).catch(
+    (error: unknown) => {
+      if (!(error instanceof BusinessNotFoundError)) throw error;
+      return null;
+    },
+  );
 
-  if (!isMember) {
+  if (!authorized) {
     return (
       <div className="mx-auto max-w-lg">
         <h2 className="text-base font-semibold text-neutral-900">No access</h2>
@@ -47,6 +47,7 @@ export default async function BusinessDashboardPage({
     );
   }
 
+  const business = authorized.business;
   const ordersHref = `/dashboard/${businessId}/orders`;
   const summary = await getDashboardSummary(session.user.id, businessId, new Date(nowMs()));
 
@@ -125,7 +126,9 @@ export default async function BusinessDashboardPage({
                     <td className="px-4 py-3 text-neutral-700">
                       {orderStatusLabel(order.status)}
                     </td>
-                    <td className="px-4 py-3 text-neutral-700">NPR {order.total}</td>
+                    <td className="px-4 py-3 text-neutral-700">
+                      {formatMoney(business.currency, order.total)}
+                    </td>
                     <td className="px-4 py-3 text-neutral-500">
                       {order.createdAt.toLocaleDateString()}
                     </td>

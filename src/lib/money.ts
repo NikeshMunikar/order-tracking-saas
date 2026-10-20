@@ -45,6 +45,11 @@ export function formatMinorUnits(value: bigint): string {
   return negative ? `-${digits}` : digits;
 }
 
+/** `formatMoney("USD", "12.50")` → "USD 12.50". */
+export function formatMoney(currency: string, amount: string): string {
+  return `${currency} ${amount}`;
+}
+
 export type OrderTotals = {
   /** Σ(quantity × unit price) — exact string, scale 2. */
   subtotal: string;

@@ -5,6 +5,7 @@ import {
   computeLineSubtotal,
   computeOrderTotals,
   formatMinorUnits,
+  formatMoney,
   parseMinorUnits,
 } from "../../src/lib/money.ts";
 
@@ -33,6 +34,11 @@ test("formatMinorUnits always renders two decimal places", () => {
   assert.equal(formatMinorUnits(5n), "0.05");
   assert.equal(formatMinorUnits(100000n), "1000.00");
   assert.equal(formatMinorUnits(-150n), "-1.50");
+});
+
+test("formatMoney prefixes the business currency", () => {
+  assert.equal(formatMoney("USD", "12.50"), "USD 12.50");
+  assert.equal(formatMoney("NPR", "1800.00"), "NPR 1800.00");
 });
 
 test("computeOrderTotals = Σ(line) + deliveryFee − discount, exactly", () => {

@@ -20,7 +20,7 @@ export default async function EditOrderPage({
   const { businessId, orderId } = await params;
   const session = await requireSession();
 
-  await getAuthorizedBusiness(session.user.id, businessId);
+  const authorized = await getAuthorizedBusiness(session.user.id, businessId);
 
   const order = await getOrder(session.user.id, businessId, orderId);
   if (!order) {
@@ -63,6 +63,7 @@ export default async function EditOrderPage({
       <div className="rounded-md border border-neutral-200 bg-white p-6">
         <EditOrderForm
           businessId={businessId}
+          currency={authorized.business.currency}
           orderId={order.id}
           products={products.filter((product) => product.active)}
           defaultValues={{

@@ -14,24 +14,39 @@ export default async function DashboardLayout({
   const session = await requireSession();
 
   return (
-    <div className="min-h-screen">
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-4">
-        <Link href="/dashboard" className="text-sm font-semibold text-neutral-900">
-          Order Tracking
-        </Link>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-neutral-500">{session.user.email}</span>
-          <form action={logoutAction}>
-            <button
-              type="submit"
-              className="text-sm font-medium text-neutral-700 underline underline-offset-2 hover:text-neutral-900"
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-line bg-surface">
+        <div className="mx-auto flex min-h-16 w-full max-w-[1440px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
+          <Link
+            href="/dashboard"
+            className="inline-flex min-h-11 items-center gap-2.5 text-sm font-semibold tracking-tight text-ink"
+          >
+            <span
+              aria-hidden="true"
+              className="grid h-7 w-7 place-items-center rounded-md bg-primary font-mono text-[10px] font-medium tracking-[0.08em] text-white"
             >
-              Sign out
-            </button>
-          </form>
+              OT
+            </span>
+            <span>Order Tracking</span>
+          </Link>
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <span className="hidden max-w-[28ch] truncate text-xs text-muted sm:block">
+              {session.user.email}
+            </span>
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="inline-flex min-h-11 items-center rounded-md px-2.5 text-sm font-medium text-muted transition-colors hover:bg-raised hover:text-ink"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-4xl px-6 py-10">{children}</main>
+      <main className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        {children}
+      </main>
     </div>
   );
 }

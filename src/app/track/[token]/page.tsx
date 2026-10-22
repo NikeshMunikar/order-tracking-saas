@@ -1,6 +1,7 @@
 import { InvalidTrackingLink } from "@/components/tracking/tracking-invalid";
 import { TrackingLinkActions } from "@/components/tracking/tracking-link-actions";
 import { TrackingRateLimited } from "@/components/tracking/tracking-rate-limited";
+import { TrackingStatusBadge } from "@/components/tracking/tracking-status-badge";
 import { headers } from "next/headers";
 import { isOrderStatus } from "@/lib/order-status";
 import { readClientIdentityFromHeaders } from "@/lib/security/client-identity";
@@ -10,7 +11,7 @@ import {
   RATE_LIMIT_BOUNDARY_TRACKING,
   TRACKING_RATE_LIMIT,
 } from "@/lib/security/rate-limit";
-import { buildTrackingTimeline, trackingStatusLabel } from "@/lib/tracking";
+import { buildTrackingTimeline } from "@/lib/tracking";
 import { getPublicTrackingOrder } from "@/server/tracking/tracking-service";
 
 // Interim in-process fixed-window rate limiter for this boundary (DEC-015):
@@ -34,26 +35,30 @@ const trackingRateLimiter = createRateLimiter(TRACKING_RATE_LIMIT);
 // Mobile-first: one narrow column, status and order summary first, the
 // timeline and item lines as plain stacked rows (MASTER_SPEC §34).
 
-function statusBadgeClass(status: string): string {
-  if (status === "CANCELLED") {
-    return "rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700";
-  }
-  if (status === "DELIVERED") {
-    return "rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700";
-  }
-  return "rounded-md bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-700";
-}
+type StageState = "complete" | "current" | "upcoming";
 
-function stageGlyph(state: "complete" | "current" | "upcoming"): string {
+function stageGlyph(state: StageState): string {
   if (state === "complete") return "✓";
   if (state === "current") return "●";
   return "○";
 }
 
-function stageStateText(state: "complete" | "current" | "upcoming"): string {
+function stageStateText(state: StageState): string {
   if (state === "complete") return "Completed";
   if (state === "current") return "Current stage";
   return "Upcoming";
+}
+
+function glyphClass(state: StageState): string {
+  if (state === "current") return "text-accent";
+  if (state === "complete") return "text-ink";
+  return "text-control";
+}
+
+function labelClass(state: StageState): string {
+  if (state === "current") return "font-medium text-ink";
+  if (state === "complete") return "text-ink";
+  return "text-muted";
 }
 
 export default async function TrackOrderPage({
@@ -97,126 +102,112 @@ export default async function TrackOrderPage({
           // The logo URL is business-supplied and may be any remote host, so a
           // plain <img> avoids configuring next/image remote patterns for it.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={business.logoUrl} alt="" className="h-11 w-11 rounded-md object-cover" />
+          <img src={business.logoUrl} alt="" className="h-12 w-12 rounded-md border border-line object-cover" />
         ) : null}
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-            Order tracking
-          </p>
-          <h1 className="truncate text-lg font-semibold text-neutral-900">{business.name}</h1>
+          <p className="text-sm text-muted">Order tracking</p>
+          <h1 className="truncate text-xl font-semibold tracking-tight text-ink">{business.name}</h1>
         </div>
       </header>
 
-      <section className="rounded-md border border-neutral-200 bg-white p-5">
+      <section className="rounded-lg border border-line bg-surface p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-neutral-900">Order #{order.orderNumber}</h2>
-          <span className={statusBadgeClass(order.status)}>
-            {trackingStatusLabel(order.status)}
-          </span>
+          <h2 className="text-lg font-semibold tracking-tight text-ink">Order #{order.orderNumber}</h2>
+          <TrackingStatusBadge status={order.status} />
         </div>
 
         {timeline.cancelledAt && (
-          <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="mt-4 rounded-md border border-status-negative-fg/25 bg-status-negative-bg px-3 py-2 text-sm text-status-negative-fg">
             This order was cancelled on {timeline.cancelledAt.toLocaleString()}.
           </p>
         )}
 
-        <ol className="mt-4 flex flex-col gap-2.5 text-sm">
+        <ol className="mt-5 flex flex-col gap-3 text-sm">
           {timeline.entries.map((entry) => (
             <li key={entry.status} className="flex items-start gap-2">
-              <span
-                aria-hidden="true"
-                className={
-                  entry.state === "upcoming" ? "text-neutral-300" : "text-neutral-900"
-                }
-              >
+              <span aria-hidden="true" className={glyphClass(entry.state)}>
                 {stageGlyph(entry.state)}
               </span>
               <span className="sr-only">{stageStateText(entry.state)}: </span>
-              <span
-                className={
-                  entry.state === "current"
-                    ? "font-medium text-neutral-900"
-                    : entry.state === "complete"
-                      ? "text-neutral-700"
-                      : "text-neutral-400"
-                }
-              >
-                {entry.label}
-              </span>
+              <span className={labelClass(entry.state)}>{entry.label}</span>
               {entry.at && (
-                <span className="ml-auto shrink-0 text-right text-xs text-neutral-400">
+                <time
+                  dateTime={entry.at.toISOString()}
+                  className="ml-auto shrink-0 text-right text-xs text-muted"
+                >
                   {entry.at.toLocaleString()}
-                </span>
+                </time>
               )}
             </li>
           ))}
         </ol>
 
         {order.estimatedDeliveryAt && (
-          <p className="mt-4 border-t border-neutral-200 pt-3 text-sm text-neutral-700">
-            <span className="font-medium text-neutral-900">Estimated delivery: </span>
-            {order.estimatedDeliveryAt.toLocaleString()}
+          <p className="mt-5 border-t border-line pt-4 text-sm text-muted">
+            <span className="font-medium text-ink">Estimated delivery: </span>
+            <time dateTime={order.estimatedDeliveryAt.toISOString()}>
+              {order.estimatedDeliveryAt.toLocaleString()}
+            </time>
           </p>
         )}
       </section>
 
-      <section className="rounded-md border border-neutral-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-neutral-900">Items</h2>
-        <ul className="mt-3 flex flex-col gap-3 text-sm">
+      <section className="rounded-lg border border-line bg-surface p-5">
+        <h2 className="text-base font-semibold tracking-tight text-ink">Items</h2>
+        <ul className="mt-4 flex flex-col gap-3 text-sm">
           {order.items.map((item, index) => (
             <li key={index} className="flex items-start justify-between gap-3">
-              <span className="text-neutral-900">
+              <span className="text-ink">
                 {item.quantity} × {item.productName}
-                <span className="block text-xs text-neutral-500">{money(item.unitPrice)} each</span>
+                <span className="block text-xs text-muted">{money(item.unitPrice)} each</span>
               </span>
-              <span className="shrink-0 text-neutral-900">{money(item.subtotal)}</span>
+              <span className="shrink-0 text-ink">{money(item.subtotal)}</span>
             </li>
           ))}
         </ul>
-        <dl className="mt-4 flex flex-col gap-2 border-t border-neutral-200 pt-3 text-sm">
+        <dl className="mt-5 flex flex-col gap-2 border-t border-line pt-4 text-sm">
           <div className="flex justify-between gap-3">
-            <dt className="text-neutral-500">Subtotal</dt>
-            <dd className="text-neutral-900">{money(order.subtotal)}</dd>
+            <dt className="text-muted">Subtotal</dt>
+            <dd className="text-ink">{money(order.subtotal)}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-neutral-500">Delivery fee</dt>
-            <dd className="text-neutral-900">{money(order.deliveryFee)}</dd>
+            <dt className="text-muted">Delivery fee</dt>
+            <dd className="text-ink">{money(order.deliveryFee)}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-neutral-500">Discount</dt>
-            <dd className="text-neutral-900">{money(order.discount)}</dd>
+            <dt className="text-muted">Discount</dt>
+            <dd className="text-ink">{money(order.discount)}</dd>
           </div>
-          <div className="flex justify-between gap-3 border-t border-neutral-200 pt-2">
-            <dt className="font-medium text-neutral-700">Total</dt>
-            <dd className="font-medium text-neutral-900">{money(order.total)}</dd>
+          <div className="flex justify-between gap-3 border-t border-line pt-3">
+            <dt className="font-medium text-ink">Total</dt>
+            <dd className="font-medium text-ink">{money(order.total)}</dd>
           </div>
         </dl>
       </section>
 
-      <section className="rounded-md border border-neutral-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-neutral-900">
+      <section className="rounded-lg border border-line bg-surface p-5">
+        <h2 className="text-base font-semibold tracking-tight text-ink">
           {isPickup ? "Pickup" : "Delivery"}
         </h2>
-        <div className="mt-2 flex flex-col gap-1 text-sm text-neutral-700">
+        <div className="mt-2 flex flex-col gap-1 text-sm text-ink">
           {isPickup ? (
             <>
               <p>Collect this order from {business.name}.</p>
-              {business.address && <p>{business.address}</p>}
+              {business.address && <p className="text-muted">{business.address}</p>}
             </>
           ) : (
             <>
               {order.recipientName && <p>{order.recipientName}</p>}
-              {order.deliveryAddress && <p>{order.deliveryAddress}</p>}
+              {order.deliveryAddress && <p className="text-muted">{order.deliveryAddress}</p>}
             </>
           )}
         </div>
         {business.phone && (
-          <p className="mt-3 border-t border-neutral-200 pt-3 text-sm">
-            <span className="text-neutral-500">Need help? Call </span>
+          <p className="mt-4 border-t border-line pt-4 text-sm">
+            <span className="text-muted">Need help? Call </span>
             <a
               href={`tel:${business.phone}`}
-              className="font-medium text-neutral-900 underline underline-offset-2"
+              className="font-medium text-ink underline underline-offset-2"
             >
               {business.name}
             </a>
@@ -224,9 +215,9 @@ export default async function TrackOrderPage({
         )}
       </section>
 
-      <section className="rounded-md border border-neutral-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-neutral-900">Share this tracking link</h2>
-        <p className="mt-1 mb-3 text-sm text-neutral-600">
+      <section className="rounded-lg border border-line bg-surface p-5">
+        <h2 className="text-base font-semibold tracking-tight text-ink">Share this tracking link</h2>
+        <p className="mb-3 mt-1 text-sm text-muted">
           Anyone with this link can follow this order. No account is needed.
         </p>
         <TrackingLinkActions token={token} shareTitle={`Order ${order.orderNumber}`} />

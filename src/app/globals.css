@@ -1,16 +1,79 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fafafa;
-  --foreground: #171717;
+  --background: #f5f6f4;
+  --foreground: #181b19;
+
+  --surface: #ffffff;
+  --raised: #f1f3f1;
+  --line: #e3e6e2;
+  --rule: #f1f3f1;
+  --control: #d2d7d2;
+  --ink: #181b19;
+  --muted: #5c635e;
+  --primary: #1d1f20;
+  --accent: #1f5c4a;
+  --focus: #1f5c4a;
+
+  --status-positive-bg: #dcfce7;
+  --status-positive-fg: #166534;
+  --status-info-bg: #dbeafe;
+  --status-info-fg: #1e40af;
+  --status-warning-bg: #fef3c7;
+  --status-warning-fg: #92400e;
+  --status-negative-bg: #fee2e2;
+  --status-negative-fg: #991b1b;
+  --status-neutral-bg: #e8eaeb;
+  --status-neutral-fg: #3a3f3c;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-rule: var(--rule);
+  --color-control: var(--control);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-accent: var(--accent);
+
+  --color-status-positive-bg: var(--status-positive-bg);
+  --color-status-positive-fg: var(--status-positive-fg);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-fg: var(--status-info-fg);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-fg: var(--status-warning-fg);
+  --color-status-negative-bg: var(--status-negative-bg);
+  --color-status-negative-fg: var(--status-negative-fg);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-neutral-fg: var(--status-neutral-fg);
+
+  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html {
+  background: var(--background);
 }
 
 body {
+  min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #dce8e2;
+  color: var(--ink);
+}
+
+:where(a, button, summary):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }

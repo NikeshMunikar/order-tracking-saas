@@ -1,5 +1,8 @@
 import Link from "next/link";
 
+import { OrderPageHeader } from "@/components/order/order-page-header";
+import { OrderStatusBadge } from "@/components/order/order-status-badge";
+import { PaymentStatusBadge } from "@/components/order/payment-status-badge";
 import { getAuthorizedBusiness } from "@/server/business/queries";
 import { BusinessNotFoundError } from "@/server/business/errors";
 import { listOrders } from "@/server/order/order-service";
@@ -44,11 +47,9 @@ export default async function OrdersPage({
 
   if (!authorized) {
     return (
-      <div className="max-w-lg rounded-md border border-neutral-200 bg-white p-6">
-        <h2 className="text-base font-semibold text-neutral-900">No access</h2>
-        <p className="mt-2 text-sm text-neutral-600">
-          You are not a member of this business.
-        </p>
+      <div className="max-w-lg rounded-lg border border-line bg-surface p-6">
+        <h2 className="text-lg font-semibold tracking-tight text-ink">No access</h2>
+        <p className="mt-2 text-sm text-muted">You are not a member of this business.</p>
       </div>
     );
   }
@@ -74,6 +75,7 @@ export default async function OrdersPage({
   const isSearching = typeof query.q === "string" && query.q.length > 0;
   const isFiltering = query.status !== undefined;
   const hasNotices = Boolean(parsed.searchError || parsed.statusError || parsed.pageError);
+  const isFiltered = isSearching || isFiltering;
 
   // Preserve the active search/filter and only emit `page` when it is not the
   // first page, so the canonical list URL stays clean.
@@ -89,72 +91,83 @@ export default async function OrdersPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-neutral-900">Orders</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            Orders this business has taken, newest first.
-          </p>
-        </div>
-        <Link
-          href={`${listHref}/new`}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
-        >
-          New order
-        </Link>
-      </div>
-
-      <form action={listHref} method="get" className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="order-search" className="text-sm font-medium text-neutral-700">
-            Search
-          </label>
-          <input
-            id="order-search"
-            name="q"
-            type="search"
-            defaultValue={isSearching ? query.q : ""}
-            maxLength={ORDER_SEARCH_MAX_LENGTH}
-            placeholder="Order number or customer"
-            className="w-64 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="order-status" className="text-sm font-medium text-neutral-700">
-            Status
-          </label>
-          <select
-            id="order-status"
-            name="status"
-            defaultValue={query.status ?? ""}
-            className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-          >
-            <option value="">All statuses</option>
-            {ORDER_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {orderStatusLabel(status)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-          type="submit"
-          className="rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-100"
-        >
-          Apply
-        </button>
-        {(isSearching || isFiltering) && (
+      <OrderPageHeader
+        backHref={`/dashboard/${businessId}`}
+        backLabel="Dashboard"
+        title="Orders"
+        description="Orders this business has taken, newest first."
+        actions={
           <Link
-            href={listHref}
-            className="rounded-md px-4 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900"
+            href={`${listHref}/new`}
+            className="inline-flex min-h-11 items-center rounded-md bg-primary px-3.5 text-sm font-medium text-white transition-colors hover:bg-ink"
           >
-            Clear
+            New order
           </Link>
-        )}
+        }
+      />
+
+      <form
+        action={listHref}
+        method="get"
+        className="rounded-lg border border-line bg-surface p-4 sm:p-5"
+      >
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_210px_auto] sm:items-end">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <label htmlFor="order-search" className="text-sm font-medium text-ink">
+              Search
+            </label>
+            <input
+              id="order-search"
+              name="q"
+              type="search"
+              defaultValue={isSearching && query.q ? query.q : ""}
+              maxLength={ORDER_SEARCH_MAX_LENGTH}
+              placeholder="Order number or customer"
+              className="min-h-11 w-full rounded-md border border-control bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="order-status" className="text-sm font-medium text-ink">
+              Status
+            </label>
+            <select
+              id="order-status"
+              name="status"
+              defaultValue={query.status ?? ""}
+              className="min-h-11 w-full rounded-md border border-control bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15"
+            >
+              <option value="">All statuses</option>
+              {ORDER_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {orderStatusLabel(status)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-raised"
+            >
+              Apply
+            </button>
+            {isFiltered && (
+              <Link
+                href={listHref}
+                className="inline-flex min-h-11 items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
+              >
+                Clear
+              </Link>
+            )}
+          </div>
+        </div>
       </form>
 
       {hasNotices && (
-        <div role="alert" className="flex flex-col gap-1 text-sm text-red-600">
+        <div
+          role="alert"
+          className="flex flex-col gap-1 rounded-md border border-status-negative-fg/25 bg-status-negative-bg px-3 py-2 text-sm text-status-negative-fg"
+        >
           {parsed.searchError && <p>{parsed.searchError}</p>}
           {parsed.statusError && <p>{parsed.statusError}</p>}
           {parsed.pageError && <p>{parsed.pageError}</p>}
@@ -162,97 +175,151 @@ export default async function OrdersPage({
       )}
 
       {result.orders.length === 0 ? (
-        result.total > 0 ? (
-          <div className="rounded-md border border-neutral-200 bg-white p-6">
-            <p className="text-sm text-neutral-600">
-              Page {result.page} is past the end of this list.
-            </p>
-            <Link
-              href={pageHref(1)}
-              className="mt-2 inline-block text-sm font-medium text-neutral-900 underline underline-offset-2"
-            >
-              Go back to page 1
-            </Link>
-          </div>
-        ) : isSearching || isFiltering ? (
-          <div className="rounded-md border border-neutral-200 bg-white p-6">
-            <p className="text-sm text-neutral-600">
-              No orders match {isSearching ? `“${query.q}”` : "this filter"}
-              {isSearching && isFiltering ? ` with status ${orderStatusLabel(String(query.status))}` : ""}.
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-md border border-neutral-200 bg-white p-6">
-            <p className="text-sm text-neutral-600">No orders yet.</p>
-            <p className="mt-1 text-sm text-neutral-500">
-              Create the first order once at least one product exists.
-            </p>
-          </div>
-        )
-      ) : (
-        <div className="overflow-x-auto rounded-md border border-neutral-200 bg-white">
-          <table className="min-w-full divide-y divide-neutral-200 text-sm">
-            <caption className="sr-only">Orders</caption>
-            <thead>
-              <tr>
-                <th scope="col" className="px-4 py-3 text-left font-medium text-neutral-500">
-                  Order
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-medium text-neutral-500">
-                  Customer
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-medium text-neutral-500">
-                  Status
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-medium text-neutral-500">
-                  Payment
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-medium text-neutral-500">
-                  Total
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-medium text-neutral-500">
-                  Created
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {result.orders.map((order) => (
-                <tr key={order.id}>
-                  <td className="px-4 py-3 font-medium text-neutral-900">
-                    <Link
-                      href={`${listHref}/${order.id}`}
-                      className="hover:underline underline-offset-2"
-                    >
-                      {order.orderNumber}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-neutral-700">{order.customerName}</td>
-                  <td className="px-4 py-3 text-neutral-700">{orderStatusLabel(order.status)}</td>
-                  <td className="px-4 py-3 text-neutral-700">{order.paymentStatus}</td>
-                  <td className="px-4 py-3 text-neutral-900">
-                    {formatMoney(business.currency, order.total)}
-                  </td>
-                  <td className="px-4 py-3 text-neutral-500">
-                    {order.createdAt.toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rounded-lg border border-line bg-surface p-6">
+          {result.total > 0 ? (
+            <>
+              <p className="text-sm font-medium text-ink">
+                Page {result.page} is past the end of this list.
+              </p>
+              <Link
+                href={pageHref(1)}
+                className="mt-3 inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-raised"
+              >
+                Go back to page 1
+              </Link>
+            </>
+          ) : isFiltered ? (
+            <>
+              <p className="text-sm font-medium text-ink">No orders match</p>
+              <p className="mt-1 text-sm text-muted">
+                {isSearching ? `No orders match “${query.q}”` : "No orders match this filter"}
+                {isSearching && isFiltering
+                  ? ` with status ${orderStatusLabel(String(query.status))}`
+                  : ""}
+                .
+              </p>
+              <Link
+                href={listHref}
+                className="mt-3 inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-raised"
+              >
+                Clear filters
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-ink">No orders yet</p>
+              <p className="mt-1 text-sm text-muted">
+                Create the first order once at least one product exists.
+              </p>
+              <Link
+                href={`${listHref}/new`}
+                className="mt-3 inline-flex min-h-11 items-center rounded-md bg-primary px-3.5 text-sm font-medium text-white transition-colors hover:bg-ink"
+              >
+                New order
+              </Link>
+            </>
+          )}
         </div>
+      ) : (
+        <>
+          <div className="hidden overflow-hidden rounded-lg border border-line bg-surface md:block">
+            <table className="min-w-full divide-y divide-line text-sm">
+              <caption className="sr-only">Orders</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Order
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Customer
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Status
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Payment
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-right text-xs font-medium text-muted">
+                    Total
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Created
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {result.orders.map((order) => (
+                  <tr key={order.id} className="transition-colors hover:bg-raised">
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <Link
+                        href={`${listHref}/${order.id}`}
+                        className="font-mono text-[13px] font-medium text-ink underline underline-offset-2"
+                      >
+                        {order.orderNumber}
+                      </Link>
+                    </td>
+                    <td className="max-w-[18rem] truncate px-5 py-4 text-ink">
+                      {order.customerName}
+                    </td>
+                    <td className="px-5 py-4">
+                      <OrderStatusBadge status={order.status} />
+                    </td>
+                    <td className="px-5 py-4">
+                      <PaymentStatusBadge status={order.paymentStatus} />
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-right font-medium text-ink tabular-nums">
+                      {formatMoney(business.currency, order.total)}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-muted">
+                      {order.createdAt.toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface md:hidden">
+            {result.orders.map((order) => (
+              <li key={order.id}>
+                <Link
+                  href={`${listHref}/${order.id}`}
+                  className="block px-4 py-4 transition-colors hover:bg-raised"
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="font-mono text-[13px] font-medium text-ink">
+                      {order.orderNumber}
+                    </span>
+                    <span className="shrink-0 text-sm font-medium text-ink tabular-nums">
+                      {formatMoney(business.currency, order.total)}
+                    </span>
+                  </span>
+                  <span className="mt-1 block truncate text-sm text-ink">
+                    {order.customerName}
+                  </span>
+                  <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                    <OrderStatusBadge status={order.status} />
+                    <PaymentStatusBadge status={order.paymentStatus} />
+                    <span>{order.createdAt.toLocaleDateString()}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       {result.total > 0 && result.orders.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-neutral-500">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
           <p>
             Page {result.page} of {result.totalPages} · {result.total}{" "}
             {result.total === 1 ? "order" : "orders"}
           </p>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-2">
             {result.page > 1 && (
               <Link
                 href={pageHref(result.page - 1)}
-                className="font-medium text-neutral-900 underline underline-offset-2"
+                className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 font-medium text-ink transition-colors hover:bg-raised"
               >
                 Previous
               </Link>
@@ -260,7 +327,7 @@ export default async function OrdersPage({
             {result.page < result.totalPages && (
               <Link
                 href={pageHref(result.page + 1)}
-                className="font-medium text-neutral-900 underline underline-offset-2"
+                className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 font-medium text-ink transition-colors hover:bg-raised"
               >
                 Next
               </Link>

@@ -1,45 +1,54 @@
 import { BusinessSettingsForm } from "@/components/business/business-forms";
-import { getAuthorizedBusiness } from "@/server/business/queries";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionCard } from "@/components/ui/section-card";
 import { requireSession } from "@/server/auth/session";
+import { getAuthorizedBusiness } from "@/server/business/queries";
 
-export default async function BusinessSettingsPage({
+export default async function SettingsPage({
   params,
 }: {
   params: Promise<{ businessId: string }>;
 }) {
-  const session = await requireSession();
   const { businessId } = await params;
-  const { business, role } = await getAuthorizedBusiness(session.user.id, businessId);
+  const session = await requireSession();
+  const authorized = await getAuthorizedBusiness(session.user.id, businessId);
 
-  if (role !== "OWNER") {
+  if (authorized.role !== "OWNER") {
     return (
-      <div className="max-w-lg">
-        <h2 className="text-base font-semibold text-neutral-900">Business settings</h2>
-        <p className="mt-2 text-sm text-neutral-500">
-          Only owners can change business settings.
-        </p>
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          backHref={`/dashboard/${businessId}`}
+          backLabel="Dashboard"
+          title="Business settings"
+        />
+        <SectionCard title="Owner access required">
+          <p className="text-sm text-muted">Only owners can change business settings.</p>
+        </SectionCard>
       </div>
     );
   }
 
-  return (
-    <div>
-      <h2 className="text-base font-semibold text-neutral-900">Business settings</h2>
-      <p className="mt-1 mb-6 text-sm text-neutral-500">
-        Your business profile, currency, and contact details.
-      </p>
+  const business = authorized.business;
 
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        backHref={`/dashboard/${businessId}`}
+        backLabel="Dashboard"
+        title="Business settings"
+        description="Your business profile, currency, and contact details."
+      />
       <BusinessSettingsForm
-        businessId={business.id}
+        businessId={businessId}
         defaultValues={{
           name: business.name,
           currency: business.currency,
           timezone: business.timezone,
-          logoUrl: business.logoUrl,
-          phone: business.phone,
-          email: business.email,
-          address: business.address,
-          description: business.description,
+          logoUrl: business.logoUrl ?? "",
+          phone: business.phone ?? "",
+          email: business.email ?? "",
+          address: business.address ?? "",
+          description: business.description ?? "",
         }}
       />
     </div>

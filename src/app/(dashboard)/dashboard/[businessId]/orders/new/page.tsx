@@ -1,6 +1,5 @@
-import Link from "next/link";
-
 import { CreateOrderForm } from "@/components/order/order-forms";
+import { OrderPageHeader } from "@/components/order/order-page-header";
 import { requireSession } from "@/server/auth/session";
 import { getAuthorizedBusiness } from "@/server/business/queries";
 import { listCustomerOptions } from "@/server/customer/customer-service";
@@ -36,28 +35,19 @@ export default async function NewOrderPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Link
-          href={`/dashboard/${businessId}/orders`}
-          className="text-sm text-neutral-500 hover:text-neutral-900"
-        >
-          &larr; Orders
-        </Link>
-        <h2 className="mt-1 text-base font-semibold text-neutral-900">New order</h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          Pick a customer, add items and set delivery details. Totals are
-          calculated on the server.
-        </p>
-      </div>
+      <OrderPageHeader
+        backHref={`/dashboard/${businessId}/orders`}
+        backLabel="Orders"
+        title="New order"
+        description="Pick a customer, add items and set delivery details. Totals are calculated on the server."
+      />
 
-      <div className="rounded-md border border-neutral-200 bg-white p-6">
-        <CreateOrderForm
-          businessId={businessId}
-          currency={authorized.business.currency}
-          customers={customers}
-          products={products}
-        />
-      </div>
+      <CreateOrderForm
+        businessId={businessId}
+        currency={authorized.business.currency}
+        customers={customers}
+        products={products}
+      />
     </div>
   );
 }

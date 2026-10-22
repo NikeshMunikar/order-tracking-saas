@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-import { SubmitButton } from "@/components/ui/submit-button";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { FormError, ManagementSubmitButton } from "@/components/ui/management-form";
 import { acceptInvitationAction } from "@/server/business/actions";
 import type { AcceptInvitationActionState } from "@/server/business/action-states";
 
@@ -22,22 +23,25 @@ export function AcceptInvitationForm({ token }: { token: string }) {
 
   if (state.status === "invalid") {
     return (
-      <div className="flex flex-col gap-3">
-        <h1 className="text-xl font-semibold text-neutral-900">Invitation unavailable</h1>
-        <p role="alert" className="text-sm text-neutral-600">
+      <AuthShell>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Invitation unavailable</h1>
+        <p role="alert" className="mb-6 mt-1 text-sm text-muted">
           This invitation link is invalid, has expired, or has already been used.
         </p>
-        <Link href="/dashboard" className="text-sm font-medium text-neutral-900 underline">
+        <Link
+          href="/dashboard"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-control bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-raised"
+        >
           Go to dashboard
         </Link>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <h1 className="text-xl font-semibold text-neutral-900">Accept invitation</h1>
-      <p className="text-sm text-neutral-600">
+    <AuthShell>
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">Accept invitation</h1>
+      <p className="mb-6 mt-1 text-sm text-muted">
         You have been invited to join a business team. Accepting adds your account as a member.
       </p>
 
@@ -45,13 +49,11 @@ export function AcceptInvitationForm({ token }: { token: string }) {
         <input type="hidden" name="token" value={token} />
 
         {state.status === "error" && (
-          <p role="alert" className="text-sm text-red-600">
-            {state.message}
-          </p>
+          <FormError message={state.message ?? "Could not accept the invitation. Please try again."} />
         )}
 
-        <SubmitButton>Accept invitation</SubmitButton>
+        <ManagementSubmitButton className="w-full">Accept invitation</ManagementSubmitButton>
       </form>
-    </div>
+    </AuthShell>
   );
 }

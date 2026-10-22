@@ -20,9 +20,5 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     redirect(`/login?callbackUrl=${encodeURIComponent(`/invite/${token}`)}`);
   }
 
-  return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-12">
-      <AcceptInvitationForm token={token} />
-    </main>
-  );
+  return <AcceptInvitationForm token={token} />;
 }

@@ -1,23 +1,17 @@
 import Link from "next/link";
 
-import { getAuthorizedBusiness } from "@/server/business/queries";
-import { BusinessNotFoundError } from "@/server/business/errors";
-import { listProducts } from "@/server/product/product-service";
-import { requireSession } from "@/server/auth/session";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { formatMoney } from "@/lib/money";
 import {
   PRODUCT_SEARCH_MAX_LENGTH,
   parseProductSearchQuery,
 } from "@/lib/validation/product";
-
-// M4 Products list (MASTER_SPEC.md roadmap: "Products: CRUD, Active/inactive"),
-// extended in M8 with name search (§20 lists "Search" among the product
-// features). Access is resolved server-side: the session user must be a member
-// of the business in the URL, so a businessId in a browser tab is only ever a
-// lookup identifier, never authorization.
-//
-// Both OWNER and STAFF may view products (MASTER_SPEC.md §4); mutation is
-// OWNER-only and the UI hides OWNER-only controls for STAFF while the
-// service enforces the same rule independently.
+import { requireSession } from "@/server/auth/session";
+import { BusinessNotFoundError } from "@/server/business/errors";
+import { getAuthorizedBusiness } from "@/server/business/queries";
+import { listProducts } from "@/server/product/product-service";
 
 export default async function ProductsPage({
   params,
@@ -30,171 +24,201 @@ export default async function ProductsPage({
   const rawSearchParams = await searchParams;
   const session = await requireSession();
 
-  let isOwner = false;
-  try {
-    const authorized = await getAuthorizedBusiness(session.user.id, businessId);
-    isOwner = authorized.role === "OWNER";
-  } catch (error) {
-    if (error instanceof BusinessNotFoundError) {
-      return (
-        <div className="max-w-lg rounded-md border border-neutral-200 bg-white p-6">
-          <h2 className="text-base font-semibold text-neutral-900">No access</h2>
-          <p className="mt-2 text-sm text-neutral-600">
-            You are not a member of this business.
-          </p>
-        </div>
-      );
-    }
+  const authorized = await getAuthorizedBusiness(session.user.id, businessId).catch(
+    (error: unknown) => {
+      if (error instanceof BusinessNotFoundError) return null;
+      throw error;
+    },
+  );
 
-    throw error;
+  if (!authorized) {
+    return (
+      <div className="max-w-lg rounded-lg border border-line bg-surface p-6">
+        <h2 className="text-lg font-semibold tracking-tight text-ink">No access</h2>
+        <p className="mt-2 text-sm text-muted">You are not a member of this business.</p>
+      </div>
+    );
   }
 
+  const business = authorized.business;
+  const isOwner = authorized.role === "OWNER";
   const parsed = parseProductSearchQuery({ q: rawSearchParams.q });
   const query = parsed.q;
   const isSearching = typeof query === "string" && query.length > 0;
   const listHref = `/dashboard/${businessId}/products`;
 
-  // Membership was already verified above; listProducts re-checks it inside
-  // the service so every entry point resolves authorization the same way.
   const products = await listProducts(session.user.id, businessId, { query });
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-neutral-900">Products</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            Items this business sells.
-          </p>
-        </div>
-        {isOwner && (
-          <Link
-            href={`${listHref}/new`}
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
-          >
-            Add product
-          </Link>
-        )}
-      </div>
+      <PageHeader
+        backHref={`/dashboard/${businessId}`}
+        backLabel="Dashboard"
+        title="Products"
+        description="Items this business sells."
+        actions={
+          isOwner ? (
+            <Link
+              href={`${listHref}/new`}
+              className="inline-flex min-h-11 items-center rounded-md bg-primary px-3.5 text-sm font-medium text-white transition-colors hover:bg-ink"
+            >
+              Add product
+            </Link>
+          ) : undefined
+        }
+      />
 
-      <form action={listHref} method="get" className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="product-search" className="text-sm font-medium text-neutral-700">
-            Search
-          </label>
-          <input
-            id="product-search"
-            name="q"
-            type="search"
-            defaultValue={isSearching ? query : ""}
-            maxLength={PRODUCT_SEARCH_MAX_LENGTH}
-            placeholder="Name"
-            className="w-64 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-          />
+      <form
+        action={listHref}
+        method="get"
+        className="rounded-lg border border-line bg-surface p-4 sm:p-5"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label htmlFor="product-search" className="text-sm font-medium text-ink">
+              Search
+            </label>
+            <input
+              id="product-search"
+              name="q"
+              type="search"
+              defaultValue={isSearching && query ? query : ""}
+              maxLength={PRODUCT_SEARCH_MAX_LENGTH}
+              placeholder="Name"
+              className="min-h-11 w-full rounded-md border border-control bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-raised"
+            >
+              Search
+            </button>
+            {isSearching && (
+              <Link
+                href={listHref}
+                className="inline-flex min-h-11 items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
+              >
+                Clear
+              </Link>
+            )}
+          </div>
         </div>
-        <button
-          type="submit"
-          className="rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-100"
-        >
-          Search
-        </button>
-        {isSearching && (
-          <Link
-            href={listHref}
-            className="rounded-md px-4 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900"
-          >
-            Clear
-          </Link>
-        )}
       </form>
 
       {parsed.searchError && (
-        <div role="alert" className="text-sm text-red-600">
-          <p>{parsed.searchError}</p>
-        </div>
+        <p
+          role="alert"
+          className="rounded-md border border-status-negative-fg/25 bg-status-negative-bg px-3 py-2 text-sm text-status-negative-fg"
+        >
+          {parsed.searchError}
+        </p>
       )}
 
       {products.length === 0 ? (
-        <div className="rounded-md border border-neutral-200 bg-white p-6">
-          {isSearching ? (
-            <p className="text-sm text-neutral-600">No products match “{query}”.</p>
-          ) : (
-            <>
-              <p className="text-sm text-neutral-600">No products yet.</p>
-              {isOwner ? (
-                <p className="mt-1 text-sm text-neutral-500">
-                  Add your first product to start taking orders.
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-neutral-500">
-                  The business owner has not added any products yet.
-                </p>
-              )}
-            </>
-          )}
-        </div>
+        <EmptyState
+          title={isSearching ? "No products match" : "No products yet"}
+          description={
+            isSearching
+              ? `No products match “${query}”.`
+              : isOwner
+                ? "Add your first product to start taking orders."
+                : "The business owner has not added any products yet."
+          }
+          action={
+            isSearching ? (
+              <Link
+                href={listHref}
+                className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-raised"
+              >
+                Clear search
+              </Link>
+            ) : isOwner ? (
+              <Link
+                href={`${listHref}/new`}
+                className="inline-flex min-h-11 items-center rounded-md bg-primary px-3.5 text-sm font-medium text-white transition-colors hover:bg-ink"
+              >
+                Add product
+              </Link>
+            ) : undefined
+          }
+        />
       ) : (
-        <div className="overflow-x-auto rounded-md border border-neutral-200 bg-white">
-          <table className="min-w-full divide-y divide-neutral-200 text-sm">
-            <thead>
-              <tr>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left font-medium text-neutral-500"
-                >
-                  Name
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left font-medium text-neutral-500"
-                >
-                  Price
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left font-medium text-neutral-500"
-                >
-                  Status
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left font-medium text-neutral-500"
-                >
-                  Added
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {products.map((product) => (
-                <tr key={product.id}>
-                  <td className="px-4 py-3 font-medium text-neutral-900">
-                    <Link
-                      href={`${listHref}/${product.id}`}
-                      className="hover:underline underline-offset-2"
-                    >
-                      {product.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-neutral-700">{product.price}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={
-                        product.active
-                          ? "text-sm text-green-700"
-                          : "text-sm text-neutral-500"
-                      }
-                    >
-                      {product.active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-neutral-500">
-                    {product.createdAt.toLocaleDateString()}
-                  </td>
+        <>
+          <div className="hidden overflow-hidden rounded-lg border border-line bg-surface md:block">
+            <table className="min-w-full divide-y divide-line text-sm">
+              <caption className="sr-only">Products</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Name
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-right text-xs font-medium text-muted">
+                    Price
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Status
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Added
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {products.map((product) => (
+                  <tr key={product.id} className="transition-colors hover:bg-raised">
+                    <td className="max-w-[24rem] truncate px-5 py-4">
+                      <Link
+                        href={`${listHref}/${product.id}`}
+                        className="font-medium text-ink underline underline-offset-2"
+                      >
+                        {product.name}
+                      </Link>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-right text-ink tabular-nums">
+                      {formatMoney(business.currency, product.price)}
+                    </td>
+                    <td className="px-5 py-4">
+                      <StatusBadge tone={product.active ? "positive" : "neutral"}>
+                        {product.active ? "Active" : "Inactive"}
+                      </StatusBadge>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-muted">
+                      {product.createdAt.toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface md:hidden">
+            {products.map((product) => (
+              <li key={product.id}>
+                <Link
+                  href={`${listHref}/${product.id}`}
+                  className="block px-4 py-4 transition-colors hover:bg-raised"
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-ink">{product.name}</span>
+                      <span className="mt-1 block text-sm text-ink tabular-nums">
+                        {formatMoney(business.currency, product.price)}
+                      </span>
+                    </span>
+                    <StatusBadge tone={product.active ? "positive" : "neutral"}>
+                      {product.active ? "Active" : "Inactive"}
+                    </StatusBadge>
+                  </span>
+                  <span className="mt-2 block text-xs text-muted">
+                    Added {product.createdAt.toLocaleDateString()}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );

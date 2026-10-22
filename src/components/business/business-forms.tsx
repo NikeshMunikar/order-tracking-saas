@@ -3,6 +3,13 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
+import {
+  FormError,
+  FormSuccess,
+  ManagementField,
+  ManagementSubmitButton,
+  ManagementTextArea,
+} from "@/components/ui/management-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
 import {
@@ -130,47 +137,100 @@ export function BusinessSettingsForm({
   const [state, formAction] = useActionState(updateBusinessSettingsAction, initialFormState);
 
   return (
-    <form action={formAction} className="flex max-w-xl flex-col gap-4" noValidate>
+    <form action={formAction} className="flex max-w-4xl flex-col gap-4" noValidate>
       <input type="hidden" name="businessId" value={businessId} />
 
-      <TextField label="Business name" name="name" type="text" defaultValue={defaultValues.name} required />
-      <TextField
-        label="Currency"
-        name="currency"
-        type="text"
-        maxLength={10}
-        defaultValue={defaultValues.currency}
-        required
-      />
-      <TextField
-        label="Timezone"
-        name="timezone"
-        type="text"
-        defaultValue={defaultValues.timezone}
-        required
-      />
+      <fieldset className="rounded-lg border border-line bg-surface p-5 sm:p-6">
+        <legend className="px-1 text-sm font-semibold text-ink">Business identity</legend>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <ManagementField
+              label="Business name"
+              name="name"
+              type="text"
+              defaultValue={defaultValues.name}
+              required
+            />
+          </div>
+          <ManagementField
+            label="Currency"
+            name="currency"
+            type="text"
+            maxLength={10}
+            defaultValue={defaultValues.currency}
+            hint="ISO currency code, for example USD."
+            required
+          />
+          <ManagementField
+            label="Timezone"
+            name="timezone"
+            type="text"
+            defaultValue={defaultValues.timezone}
+            hint="IANA timezone, for example Asia/Kathmandu."
+            required
+          />
+        </div>
+      </fieldset>
 
-      <OptionalBusinessFields
-        logoUrl={defaultValues.logoUrl ?? ""}
-        phone={defaultValues.phone ?? ""}
-        email={defaultValues.email ?? ""}
-        address={defaultValues.address ?? ""}
-        description={defaultValues.description ?? ""}
-      />
+      <fieldset className="rounded-lg border border-line bg-surface p-5 sm:p-6">
+        <legend className="px-1 text-sm font-semibold text-ink">Contact</legend>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <ManagementField
+            label="Phone"
+            name="phone"
+            type="tel"
+            autoComplete="tel"
+            defaultValue={defaultValues.phone ?? ""}
+          />
+          <ManagementField
+            label="Contact email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            defaultValue={defaultValues.email ?? ""}
+          />
+          <div className="sm:col-span-2">
+            <ManagementTextArea
+              label="Address"
+              name="address"
+              rows={2}
+              defaultValue={defaultValues.address ?? ""}
+            />
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset className="rounded-lg border border-line bg-surface p-5 sm:p-6">
+        <legend className="px-1 text-sm font-semibold text-ink">Branding</legend>
+        <div className="mt-4 grid gap-4">
+          <ManagementField
+            label="Logo URL"
+            name="logoUrl"
+            type="url"
+            autoComplete="off"
+            defaultValue={defaultValues.logoUrl ?? ""}
+            hint="Optional public URL for the business logo."
+          />
+          <ManagementTextArea
+            label="Description"
+            name="description"
+            rows={3}
+            defaultValue={defaultValues.description ?? ""}
+            hint="Optional short description shown on customer-facing pages."
+          />
+        </div>
+      </fieldset>
 
       {state.status === "error" && (
-        <p role="alert" className="text-sm text-red-600">
-          {state.message}
-        </p>
+        <FormError message={state.message ?? "Unable to save business settings."} />
       )}
-
       {state.status === "success" && (
-        <p role="status" className="text-sm text-green-700">
-          {state.message}
-        </p>
+        <FormSuccess message={state.message ?? "Business settings updated."} />
       )}
 
-      <SubmitButton>Save changes</SubmitButton>
+      <div>
+        <ManagementSubmitButton>Save changes</ManagementSubmitButton>
+      </div>
     </form>
   );
 }

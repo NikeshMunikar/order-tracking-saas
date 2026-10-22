@@ -1,31 +1,14 @@
 import Link from "next/link";
 
-import { CUSTOMER_SEARCH_MAX_LENGTH, parseCustomerListQuery } from "@/lib/validation/customer";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { requireSession } from "@/server/auth/session";
+import {
+  CUSTOMER_SEARCH_MAX_LENGTH,
+  parseCustomerListQuery,
+} from "@/lib/validation/customer";
 import { listCustomers } from "@/server/customer/customer-service";
 
-/**
- * Customer list (MASTER_SPEC.md §19 / milestone 3: CRUD, search, details).
- *
- * Authorization: `listCustomers` re-resolves the caller's membership for the
- * `businessId` from the URL server-side; the URL segment is only a
- * navigation identifier. A non-member gets the same generic "no access"
- * response from the business layout, never a hint that the business exists.
- *
- * Search covers name and phone (docs/ui-ux.md §8: "search and show at least
- * name, phone…"; docs/database.md §4 identifies phone as a customer access
- * path). The search is a plain GET form, so it needs no client JavaScript.
- *
- * The `q` and `page` query parameters are parsed independently (M3 audit F3):
- * a malformed `page` falls back to page 1 with a visible notice without
- * discarding a valid search term, and a page number past the last matching
- * page renders an explicit out-of-range state instead of the "no customers"
- * state or a false "Page X of Y" footer.
- *
- * The "Orders" count and "Last Order" columns from MASTER_SPEC.md §19 /
- * docs/ui-ux.md §8 were added in milestone 5, once the `Order` model
- * (and the DEC-007 order numbers they reference) existed.
- */
 export default async function CustomersPage({
   params,
   searchParams,
@@ -33,14 +16,14 @@ export default async function CustomersPage({
   params: Promise<{ businessId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await requireSession();
   const { businessId } = await params;
-  const rawQuery = await searchParams;
+  const rawSearchParams = await searchParams;
+  const session = await requireSession();
 
-  // M3 audit F3: `q` and `page` are validated independently, so a malformed
-  // `page` falls back to page 1 with a notice instead of silently discarding a
-  // valid search term (and vice versa).
-  const parsed = parseCustomerListQuery({ q: rawQuery.q, page: rawQuery.page });
+  const parsed = parseCustomerListQuery({
+    q: rawSearchParams.q,
+    page: rawSearchParams.page,
+  });
   const query = { q: parsed.q, page: parsed.page };
   const searchError = parsed.searchError ?? null;
   const pageError = parsed.pageError ?? null;
@@ -53,68 +36,75 @@ export default async function CustomersPage({
   const isSearching = typeof query.q === "string" && query.q.length > 0;
   const listHref = `/dashboard/${businessId}/customers`;
 
-  function pageHref(page: number) {
-    const search = new URLSearchParams();
-    if (isSearching) {
-      search.set("q", query.q as string);
-    }
-    if (page > 1) {
-      search.set("page", String(page));
-    }
-    const suffix = search.toString();
-    return suffix ? `${listHref}?${suffix}` : listHref;
-  }
+  const pageHref = (page: number) => {
+    const next = new URLSearchParams();
+    if (isSearching && query.q) next.set("q", query.q);
+    if (page > 1) next.set("page", String(page));
+    const queryString = next.toString();
+    return queryString === "" ? listHref : `${listHref}?${queryString}`;
+  };
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-neutral-900">Customers</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            People this business delivers to.
-          </p>
-        </div>
-        <Link
-          href={`${listHref}/new`}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
-        >
-          Add customer
-        </Link>
-      </div>
-
-      <form action={listHref} method="get" className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="customer-search" className="text-sm font-medium text-neutral-700">
-            Search
-          </label>
-          <input
-            id="customer-search"
-            name="q"
-            type="search"
-            defaultValue={isSearching ? (query.q as string) : ""}
-            maxLength={CUSTOMER_SEARCH_MAX_LENGTH}
-            placeholder="Name or phone"
-            className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-          />
-        </div>
-        <button
-          type="submit"
-          className="rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50"
-        >
-          Search
-        </button>
-        {isSearching && (
+      <PageHeader
+        backHref={`/dashboard/${businessId}`}
+        backLabel="Dashboard"
+        title="Customers"
+        description="People this business delivers to."
+        actions={
           <Link
-            href={listHref}
-            className="pb-2 text-sm font-medium text-neutral-700 underline underline-offset-2"
+            href={`${listHref}/new`}
+            className="inline-flex min-h-11 items-center rounded-md bg-primary px-3.5 text-sm font-medium text-white transition-colors hover:bg-ink"
           >
-            Clear
+            Add customer
           </Link>
-        )}
+        }
+      />
+
+      <form
+        action={listHref}
+        method="get"
+        className="rounded-lg border border-line bg-surface p-4 sm:p-5"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label htmlFor="customer-search" className="text-sm font-medium text-ink">
+              Search
+            </label>
+            <input
+              id="customer-search"
+              name="q"
+              type="search"
+              defaultValue={isSearching && query.q ? query.q : ""}
+              maxLength={CUSTOMER_SEARCH_MAX_LENGTH}
+              placeholder="Name or phone"
+              className="min-h-11 w-full rounded-md border border-control bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-raised"
+            >
+              Search
+            </button>
+            {isSearching && (
+              <Link
+                href={listHref}
+                className="inline-flex min-h-11 items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
+              >
+                Clear
+              </Link>
+            )}
+          </div>
+        </div>
       </form>
 
       {(searchError || pageError) && (
-        <div role="alert" className="flex flex-col gap-1 text-sm text-red-600">
+        <div
+          role="alert"
+          className="flex flex-col gap-1 rounded-md border border-status-negative-fg/25 bg-status-negative-bg px-3 py-2 text-sm text-status-negative-fg"
+        >
           {searchError && <p>{searchError}</p>}
           {pageError && <p>{pageError}</p>}
         </div>
@@ -122,105 +112,168 @@ export default async function CustomersPage({
 
       {result.customers.length === 0 ? (
         result.total > 0 ? (
-          // M3 audit F3: a page beyond the last matching page is not "no
-          // customers" — matches exist but this page is empty. Say that
-          // truthfully instead of the no-data state or a false page footer.
-          <div className="flex flex-col gap-2 text-sm text-neutral-500">
-            <p>
-              Page {result.page} is past the end of this list. There{" "}
-              {result.total === 1
-                ? "is 1 matching customer"
-                : `are ${result.total} matching customers`}{" "}
-              on {result.totalPages} {result.totalPages === 1 ? "page" : "pages"} in total.
-            </p>
-            <p>
-              <Link href={pageHref(1)} className="text-neutral-900 underline underline-offset-2">
+          <EmptyState
+            title={`Page ${result.page} is past the end of this list.`}
+            description={`There ${result.total === 1 ? "is" : "are"} ${result.total} matching ${
+              result.total === 1 ? "customer" : "customers"
+            } on ${result.totalPages} ${result.totalPages === 1 ? "page" : "pages"} in total.`}
+            action={
+              <Link
+                href={pageHref(1)}
+                className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-raised"
+              >
                 Go back to page 1
               </Link>
-            </p>
-          </div>
+            }
+          />
+        ) : isSearching ? (
+          <EmptyState
+            title="No customers match"
+            description={`No customers match “${query.q}”.`}
+            action={
+              <Link
+                href={listHref}
+                className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-raised"
+              >
+                Clear search
+              </Link>
+            }
+          />
         ) : (
-          <p className="text-sm text-neutral-500">
-            {isSearching
-              ? `No customers match “${query.q}”.`
-              : "No customers yet. Add your first customer to start creating orders for them."}
-          </p>
+          <EmptyState
+            title="No customers yet"
+            description="Add your first customer to start creating orders for them."
+            action={
+              <Link
+                href={`${listHref}/new`}
+                className="inline-flex min-h-11 items-center rounded-md bg-primary px-3.5 text-sm font-medium text-white transition-colors hover:bg-ink"
+              >
+                Add customer
+              </Link>
+            }
+          />
         )
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[32rem] border-collapse text-sm">
-            <caption className="sr-only">Customers</caption>
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th scope="col" className="py-2 pr-4">
-                  Name
-                </th>
-                <th scope="col" className="py-2 pr-4">
-                  Phone
-                </th>
-                <th scope="col" className="hidden py-2 pr-4 sm:table-cell">
-                  Email
-                </th>
-                <th scope="col" className="py-2 pr-4">
-                  Orders
-                </th>
-                <th scope="col" className="py-2 pr-4">
-                  Last Order
-                </th>
-                <th scope="col" className="py-2">
-                  Added
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.customers.map((customer) => (
-                <tr key={customer.id} className="border-b border-neutral-100 last:border-b-0">
-                  <th scope="row" className="py-3 pr-4 text-left font-medium text-neutral-900">
-                    <Link
-                      href={`${listHref}/${customer.id}`}
-                      className="underline underline-offset-2"
-                    >
-                      {customer.name}
-                    </Link>
+        <>
+          <div className="hidden overflow-hidden rounded-lg border border-line bg-surface md:block">
+            <table className="min-w-full divide-y divide-line text-sm">
+              <caption className="sr-only">Customers</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Name
                   </th>
-                  <td className="py-3 pr-4 text-neutral-700">{customer.phone}</td>
-                  <td className="hidden py-3 pr-4 text-neutral-700 sm:table-cell">
-                    {customer.email ?? "—"}
-                  </td>
-                  <td className="py-3 pr-4 text-neutral-700">{customer.ordersCount}</td>
-                  <td className="py-3 pr-4 text-neutral-700">
-                    {customer.lastOrder
-                      ? `${customer.lastOrder.orderNumber} · ${customer.lastOrder.createdAt.toLocaleDateString()}`
-                      : "—"}
-                  </td>
-                  <td className="py-3 text-neutral-500">
-                    {customer.createdAt.toLocaleDateString()}
-                  </td>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Phone
+                  </th>
+                  <th
+                    scope="col"
+                    className="hidden px-5 py-3 text-left text-xs font-medium text-muted lg:table-cell"
+                  >
+                    Email
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Orders
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Last order
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-left text-xs font-medium text-muted">
+                    Added
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {result.customers.map((customer) => (
+                  <tr key={customer.id} className="transition-colors hover:bg-raised">
+                    <td className="max-w-[16rem] truncate px-5 py-4">
+                      <Link
+                        href={`${listHref}/${customer.id}`}
+                        className="font-medium text-ink underline underline-offset-2"
+                      >
+                        {customer.name}
+                      </Link>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-ink">{customer.phone}</td>
+                    <td className="hidden max-w-[16rem] truncate px-5 py-4 text-muted lg:table-cell">
+                      {customer.email ?? "—"}
+                    </td>
+                    <td className="px-5 py-4 text-ink tabular-nums">{customer.ordersCount}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-muted">
+                      {customer.lastOrder
+                        ? `${customer.lastOrder.orderNumber} · ${customer.lastOrder.createdAt.toLocaleDateString()}`
+                        : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-muted">
+                      {customer.createdAt.toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface md:hidden">
+            {result.customers.map((customer) => (
+              <li key={customer.id}>
+                <Link
+                  href={`${listHref}/${customer.id}`}
+                  className="block px-4 py-4 transition-colors hover:bg-raised"
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-ink">{customer.name}</span>
+                      <span className="mt-1 block text-sm text-muted">{customer.phone}</span>
+                      {customer.email && (
+                        <span className="mt-0.5 block truncate text-xs text-muted">
+                          {customer.email}
+                        </span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted">
+                      {customer.ordersCount} {customer.ordersCount === 1 ? "order" : "orders"}
+                    </span>
+                  </span>
+                  <span className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                    <span>
+                      {customer.lastOrder
+                        ? `Last ${customer.lastOrder.orderNumber} · ${customer.lastOrder.createdAt.toLocaleDateString()}`
+                        : "No orders yet"}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>Added {customer.createdAt.toLocaleDateString()}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       {result.total > 0 && result.customers.length > 0 && (
-        <div className="flex items-center justify-between gap-4 text-sm text-neutral-500">
-          <span>
-            Page {result.page} of {result.totalPages} &middot; {result.total}{" "}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+          <p>
+            Page {result.page} of {result.totalPages} · {result.total}{" "}
             {result.total === 1 ? "customer" : "customers"}
-          </span>
-          <span className="flex gap-4">
+          </p>
+          <div className="flex items-center gap-2">
             {result.page > 1 && (
-              <Link href={pageHref(result.page - 1)} className="font-medium text-neutral-900 underline underline-offset-2">
+              <Link
+                href={pageHref(result.page - 1)}
+                className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 font-medium text-ink transition-colors hover:bg-raised"
+              >
                 Previous
               </Link>
             )}
             {result.page < result.totalPages && (
-              <Link href={pageHref(result.page + 1)} className="font-medium text-neutral-900 underline underline-offset-2">
+              <Link
+                href={pageHref(result.page + 1)}
+                className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 font-medium text-ink transition-colors hover:bg-raised"
+              >
                 Next
               </Link>
             )}
-          </span>
+          </div>
         </div>
       )}
     </div>

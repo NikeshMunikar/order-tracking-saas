@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BusinessNavigation } from "@/components/layout/business-navigation";
 import { BusinessNotFoundError } from "@/server/business/errors";
 import { getAuthorizedBusiness } from "@/server/business/queries";
 import { requireSession } from "@/server/auth/session";
@@ -51,59 +52,13 @@ export default async function BusinessLayout({
   const isOwner = authorized.role === "OWNER";
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <Link href="/dashboard" className="text-sm text-neutral-500 hover:text-neutral-900">
-          &larr; All businesses
-        </Link>
-        <h1 className="mt-1 text-lg font-semibold text-neutral-900">{authorized.business.name}</h1>
-      </div>
-
-      <nav
-        aria-label="Business sections"
-        className="flex gap-6 overflow-x-auto border-b border-neutral-200 text-sm font-medium"
-      >
-        <Link
-          href={`/dashboard/${businessId}`}
-          className="pb-2 text-neutral-700 hover:text-neutral-900"
-        >
-          Dashboard
-        </Link>
-        {isOwner && (
-          <Link
-            href={`/dashboard/${businessId}/settings`}
-            className="pb-2 text-neutral-700 hover:text-neutral-900"
-          >
-            Settings
-          </Link>
-        )}
-        <Link
-          href={`/dashboard/${businessId}/orders`}
-          className="pb-2 text-neutral-700 hover:text-neutral-900"
-        >
-          Orders
-        </Link>
-        <Link
-          href={`/dashboard/${businessId}/customers`}
-          className="pb-2 text-neutral-700 hover:text-neutral-900"
-        >
-          Customers
-        </Link>
-        <Link
-          href={`/dashboard/${businessId}/products`}
-          className="pb-2 text-neutral-700 hover:text-neutral-900"
-        >
-          Products
-        </Link>
-        <Link
-          href={`/dashboard/${businessId}/team`}
-          className="pb-2 text-neutral-700 hover:text-neutral-900"
-        >
-          Team
-        </Link>
-      </nav>
-
-      <div>{children}</div>
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+      <BusinessNavigation
+        businessId={businessId}
+        businessName={authorized.business.name}
+        isOwner={isOwner}
+      />
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

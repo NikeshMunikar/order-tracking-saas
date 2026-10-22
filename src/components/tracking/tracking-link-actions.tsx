@@ -34,7 +34,7 @@ export function TrackingLinkActions({
 
   return (
     <div className="flex flex-col gap-2">
-      <code className="break-all rounded-md bg-neutral-100 px-3 py-2 text-xs text-neutral-800">
+      <code className="break-all rounded-md border border-line bg-raised px-3 py-2 font-mono text-xs text-ink">
         {path}
       </code>
       <div className="flex flex-wrap items-center gap-2">
@@ -43,7 +43,7 @@ export function TrackingLinkActions({
           onClick={async () => {
             setCopyState((await copyLink()) ? "done" : "failed");
           }}
-          className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50"
+          className="inline-flex min-h-11 items-center rounded-md border border-control bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-raised"
         >
           Copy link
         </button>
@@ -65,27 +65,31 @@ export function TrackingLinkActions({
             }
             setShareState((await copyLink()) ? "copied" : "failed");
           }}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-800"
+          className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 text-sm font-medium text-white transition-colors hover:bg-ink"
         >
           Share
         </button>
-        {copyState === "done" && <span className="text-sm text-green-700">Copied.</span>}
-        {copyState === "failed" && (
-          <span className="text-sm text-red-600">
-            Could not copy automatically — select the link and copy it manually.
-          </span>
-        )}
-        {shareState === "shared" && <span className="text-sm text-green-700">Link shared.</span>}
-        {shareState === "copied" && (
-          <span className="text-sm text-green-700">
-            Sharing is unavailable here — the link was copied instead.
-          </span>
-        )}
-        {shareState === "failed" && (
-          <span className="text-sm text-red-600">
-            Could not share or copy automatically — select the link and copy it manually.
-          </span>
-        )}
+        <div className="text-sm" aria-live="polite">
+          {copyState === "done" && <span className="text-status-positive-fg">Copied.</span>}
+          {copyState === "failed" && (
+            <span className="text-status-negative-fg">
+              Could not copy automatically — select the link and copy it manually.
+            </span>
+          )}
+          {shareState === "shared" && (
+            <span className="text-status-positive-fg">Link shared.</span>
+          )}
+          {shareState === "copied" && (
+            <span className="text-status-positive-fg">
+              Sharing is unavailable here — the link was copied instead.
+            </span>
+          )}
+          {shareState === "failed" && (
+            <span className="text-status-negative-fg">
+              Could not share or copy automatically — select the link and copy it manually.
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

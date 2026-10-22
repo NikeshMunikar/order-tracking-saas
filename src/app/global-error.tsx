@@ -17,17 +17,17 @@ export default function GlobalError({ error, retry }: { error: unknown; retry: (
 
   return (
     <html lang="en">
-      <body className="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
+      <body className="min-h-screen bg-background text-ink antialiased">
         <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4">
-          <div className="rounded-md border border-neutral-200 bg-white p-6">
-            <h1 className="text-base font-semibold text-neutral-900">Something went wrong</h1>
-            <p className="mt-2 text-sm text-neutral-600">
+          <div className="rounded-lg border border-line bg-surface p-6">
+            <h1 className="text-lg font-semibold tracking-tight text-ink">Something went wrong</h1>
+            <p className="mt-2 text-sm text-muted">
               The application could not be loaded. Please try again in a moment.
             </p>
             <button
               type="button"
               onClick={() => retry()}
-              className="mt-4 rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50"
+              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink"
             >
               Try again
             </button>

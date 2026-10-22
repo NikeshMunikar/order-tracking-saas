@@ -3,8 +3,13 @@
 import Link from "next/link";
 import { useActionState } from "react";
 
-import { SubmitButton } from "@/components/ui/submit-button";
-import { TextField } from "@/components/ui/text-field";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { PasswordField } from "@/components/auth/password-field";
+import {
+  FormError,
+  ManagementField,
+  ManagementSubmitButton,
+} from "@/components/ui/management-form";
 import { registerAction, type RegisterActionState } from "@/server/auth/register";
 
 const initialState: RegisterActionState = { status: "idle" };
@@ -18,61 +23,62 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
 
   if (state.status === "success") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-12">
-        <h1 className="mb-2 text-xl font-semibold text-neutral-900">Account created</h1>
-        <p className="mb-6 text-sm text-neutral-500">
+      <AuthShell>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Account created</h1>
+        <p className="mb-6 mt-1 text-sm text-muted">
           Your account has been created. You can now sign in.
         </p>
         <Link
           href={loginHref}
-          className="inline-flex w-fit items-center justify-center rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink"
         >
           Go to sign in
         </Link>
-      </main>
+      </AuthShell>
     );
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-12">
-      <h1 className="mb-1 text-xl font-semibold text-neutral-900">Create an account</h1>
-      <p className="mb-6 text-sm text-neutral-500">
+    <AuthShell>
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">Create an account</h1>
+      <p className="mb-6 mt-1 text-sm text-muted">
         Set up your account to start tracking orders.
       </p>
 
       <form action={formAction} className="flex flex-col gap-4" noValidate>
-        <TextField label="Name" name="name" type="text" autoComplete="name" />
-        <TextField
+        <ManagementField label="Name" name="name" type="text" autoComplete="name" />
+        <ManagementField
           label="Email"
           name="email"
           type="email"
           autoComplete="email"
           required
         />
-        <TextField
+        <PasswordField
           label="Password"
           name="password"
-          type="password"
           autoComplete="new-password"
           minLength={10}
           required
+          hint="At least 10 characters."
         />
 
         {state.status === "error" && (
-          <p role="alert" className="text-sm text-red-600">
-            {state.message}
-          </p>
+          <FormError message={state.message ?? "Could not create the account. Please try again."} />
         )}
 
-        <SubmitButton>Create account</SubmitButton>
+        <ManagementSubmitButton className="w-full">Create account</ManagementSubmitButton>
       </form>
 
-      <p className="mt-6 text-sm text-neutral-500">
+      <p className="mt-6 text-sm text-muted">
         Already have an account?{" "}
-        <Link href={loginHref} className="font-medium text-neutral-900 underline">
+        <Link
+          href={loginHref}
+          className="font-medium text-ink underline underline-offset-2"
+        >
           Sign in
         </Link>
       </p>
-    </main>
+    </AuthShell>
   );
 }

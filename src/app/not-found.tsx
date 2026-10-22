@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { PublicState } from "@/components/public/public-state";
+
 /**
  * Segment-level not-found boundary (MASTER_SPEC §33, M9 safe error
  * handling): a generic 404 that reveals nothing about routes, tenants, or
@@ -8,19 +10,18 @@ import Link from "next/link";
  */
 export default function NotFound() {
   return (
-    <main className="mx-auto flex min-h-[60vh] w-full max-w-md flex-col justify-center px-4">
-      <div className="rounded-md border border-neutral-200 bg-white p-6">
-        <h1 className="text-base font-semibold text-neutral-900">Page not found</h1>
-        <p className="mt-2 text-sm text-neutral-600">
-          The page you are looking for does not exist.
-        </p>
+    <PublicState
+      title="Page not found"
+      action={
         <Link
           href="/"
-          className="mt-4 inline-block rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50"
+          className="inline-flex min-h-11 items-center justify-center rounded-md border border-control bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-raised"
         >
           Go home
         </Link>
-      </div>
-    </main>
+      }
+    >
+      <p>The page you are looking for does not exist.</p>
+    </PublicState>
   );
 }
